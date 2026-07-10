@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RedlineApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+590e32a0d9ef2318d6dbc8c76a0c3e3bd6c3cdf1")]
 [assembly: System.Reflection.AssemblyProductAttribute("RedlineApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RedlineApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

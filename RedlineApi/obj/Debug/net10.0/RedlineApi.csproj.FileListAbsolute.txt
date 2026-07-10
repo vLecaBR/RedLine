@@ -39,3 +39,4 @@ C:\Code\RedLine\RedlineApi\obj\Debug\net10.0\refint\RedlineApi.dll
 C:\Code\RedLine\RedlineApi\obj\Debug\net10.0\RedlineApi.pdb
 C:\Code\RedLine\RedlineApi\obj\Debug\net10.0\RedlineApi.genruntimeconfig.cache
 C:\Code\RedLine\RedlineApi\obj\Debug\net10.0\ref\RedlineApi.dll
+C:\Code\RedLine\RedlineApi\obj\Debug\net10.0\RedlineApi.sourcelink.json
