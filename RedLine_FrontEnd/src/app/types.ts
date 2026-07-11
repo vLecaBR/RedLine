@@ -45,6 +45,17 @@ export interface Vehicle {
   views: number;
 }
 
+// Vendedor público (retorno de GET /api/sellers/{id}). Não expõe email.
+// avatarUrl pode vir null; vehicleCount substitui o antigo useSellerVehicleCount.
+export interface PublicSeller {
+  id: string;
+  name: string;
+  role: UserRole;
+  avatarUrl: string | null;
+  memberSince: number;
+  vehicleCount: number;
+}
+
 export type LeadStatus = "Novo" | "Em atendimento" | "Convertido" | "Perdido";
 
 export interface Lead {

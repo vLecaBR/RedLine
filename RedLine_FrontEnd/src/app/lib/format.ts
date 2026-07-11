@@ -12,6 +12,20 @@ export function formatKm(value: number): string {
   return new Intl.NumberFormat("pt-BR").format(value) + " km";
 }
 
+/**
+ * Parse/format de datas ISO 8601 (o backend agora envia "2026-06-28T00:00:00Z",
+ * não mais "2026-06-28" / "2026-07-10 09:12"). Retorna "" para entradas inválidas.
+ */
+export function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+}
+
 const STAGE_COLORS: Record<string, string> = {
   Original: "text-cyan-300 border-cyan-400/40 bg-cyan-400/10",
   "Stage 1": "text-orange-300 border-orange-400/40 bg-orange-400/10",

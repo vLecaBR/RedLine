@@ -20,22 +20,68 @@ import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { Badge } from "../components/Badge";
 import { SpecAccordion } from "../components/SpecAccordion";
 import { formatPrice, formatKm, stageBadgeClass } from "../lib/format";
-import { useSeller, useSellerVehicleCount } from "../hooks";
+import { useSeller } from "../hooks";
 import { useApp } from "../store";
+
+const AVATAR_FALLBACK =
+  "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200";
 
 export function VehicleDetailPage({
   vehicle,
+  loading,
+  error,
   onBack,
   onContact,
 }: {
-  vehicle: Vehicle;
+  vehicle?: Vehicle;
+  loading?: boolean;
+  error?: unknown;
   onBack: () => void;
   onContact: () => void;
 }) {
   const { isFavorite, toggleFavorite } = useApp();
-  const seller = useSeller(vehicle.sellerId);
-  const sellerCount = useSellerVehicleCount(vehicle.sellerId);
+  const { seller } = useSeller(vehicle?.sellerId);
   const [activeImg, setActiveImg] = useState(0);
+
+  // Estado de carregamento: skeleton enquanto o GET não resolve.
+  if (loading) {
+    return (
+      <div className="pb-32">
+        <div className="aspect-[4/3] w-full animate-pulse bg-white/5 sm:aspect-video" />
+        <div className="mx-auto max-w-3xl space-y-4 px-4 pt-6">
+          <div className="h-6 w-2/3 animate-pulse rounded bg-white/10" />
+          <div className="h-4 w-1/3 animate-pulse rounded bg-white/10" />
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-20 animate-pulse rounded-xl bg-white/5" />
+            ))}
+          </div>
+          <div className="h-40 animate-pulse rounded-2xl bg-white/5" />
+        </div>
+      </div>
+    );
+  }
+
+  // Estado de erro / não encontrado.
+  if (error || !vehicle) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center px-4 pb-24 pt-32 text-center">
+        <h1 className="text-white" style={{ fontWeight: 800 }}>
+          Veículo não encontrado
+        </h1>
+        <p className="mt-2 text-sm text-slate-400">
+          O anúncio que você procura não existe mais ou o link está incorreto.
+        </p>
+        <button
+          onClick={onBack}
+          className="mt-6 min-h-[48px] rounded-xl border border-white/10 bg-white/5 px-6 text-slate-200 transition hover:border-white/25"
+        >
+          Voltar para a vitrine
+        </button>
+      </div>
+    );
+  }
+
   const fav = isFavorite(vehicle.id);
 
   const facts = [
@@ -162,7 +208,7 @@ export function VehicleDetailPage({
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
             <div className="flex items-center gap-4">
               <img
-                src={seller.avatarUrl}
+                src={seller.avatarUrl ?? AVATAR_FALLBACK}
                 alt={seller.name}
                 className="h-14 w-14 rounded-full border-2 border-orange-500/50 object-cover"
               />
@@ -174,7 +220,7 @@ export function VehicleDetailPage({
               </div>
             </div>
             <button className="mt-4 min-h-[44px] w-full rounded-xl border border-white/10 bg-white/5 text-sm text-slate-200 transition hover:border-white/25">
-              Ver mais {sellerCount} veículos deste vendedor
+              Ver mais {seller.vehicleCount} veículos deste vendedor
             </button>
           </div>
         )}

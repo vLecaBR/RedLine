@@ -12,7 +12,7 @@ const HERO_IMG =
 
 export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
   const [filter, setFilter] = useState("Todos");
-  const { cars, loading } = useCars(filter);
+  const { cars, loading, error } = useCars(filter);
 
   return (
     <div className="pb-8">
@@ -68,7 +68,14 @@ export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => voi
           <FilterPills active={filter} onChange={setFilter} />
         </div>
 
-        {loading ? (
+        {error ? (
+          <div className="mt-16 flex flex-col items-center text-center text-slate-400">
+            <p className="text-white" style={{ fontWeight: 700 }}>
+              Não foi possível carregar a vitrine
+            </p>
+            <p className="mt-1 text-sm">Verifique se a RedlineApi está no ar e tente novamente.</p>
+          </div>
+        ) : loading ? (
           <div className="grid grid-cols-1 gap-5 pt-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />

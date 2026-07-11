@@ -1,56 +1,47 @@
-// --- HOOKS (Camada de Serviços simulada) ---
-// Simulam chamadas de API. Retornam sempre dados dos mocks centralizados.
+// --- HOOKS (Camada de Serviços) ---
+// Vitrine/detalhe/vendedor: dados REAIS da RedlineApi via SWR.
+// Leads/KPIs/roleta: ainda mockados (fases futuras).
 
-import { useState, useEffect } from "react";
-import type { Vehicle, Lead, User } from "./types";
-import { VEHICLES, LEADS, SELLERS, KPIS } from "./data/mocks";
+import { useState } from "react";
+import useSWR from "swr";
+import type { Vehicle, User, Lead, PublicSeller } from "./types";
+import { fetcher, type PagedResult } from "./lib/api";
+import { LEADS, SELLERS, KPIS } from "./data/mocks";
 
-/** Simula latência de rede. */
-function delay<T>(data: T, ms = 500): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(data), ms));
-}
-
+/**
+ * Lista da vitrine. O filtro agora é server-side (query param) — sem filtragem no cliente.
+ * Mantém a assinatura { cars, loading } para não quebrar a HomePage; expõe `error` opcionalmente.
+ */
 export function useCars(filter?: string) {
-  const [cars, setCars] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    delay(VEHICLES).then((data) => {
-      if (!active) return;
-      const filtered =
-        !filter || filter === "Todos"
-          ? data
-          : data.filter((c) =>
-              filter === "Modificados"
-                ? c.stage !== "Original"
-                : filter === "Originais"
-                ? c.stage === "Original"
-                : c.brand === filter
-            );
-      setCars(filtered);
-      setLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [filter]);
-
-  return { cars, loading };
+  const f = filter && filter.length > 0 ? filter : "Todos";
+  const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(
+    `/api/vehicles?filter=${encodeURIComponent(f)}`,
+    fetcher
+  );
+  return { cars: data?.items ?? [], loading: isLoading, error };
 }
 
-export function useCar(id: string) {
-  return VEHICLES.find((c) => c.id === id) ?? null;
+/** Detalhe de um veículo. Assíncrono (antes era síncrono sobre o mock). */
+export function useCar(id?: string) {
+  const { data, isLoading, error } = useSWR<Vehicle>(
+    id ? `/api/vehicles/${id}` : null,
+    fetcher
+  );
+  return { vehicle: data, loading: isLoading, error };
 }
 
-export function useSeller(id: string): User | null {
-  return SELLERS.find((s) => s.id === id) ?? null;
+/** Vendedor público. Traz `vehicleCount` — substitui useSellerVehicleCount. */
+export function useSeller(id?: string) {
+  const { data, isLoading, error } = useSWR<PublicSeller>(
+    id ? `/api/sellers/${id}` : null,
+    fetcher
+  );
+  return { seller: data, loading: isLoading, error };
 }
 
-export function useSellerVehicleCount(sellerId: string): number {
-  return VEHICLES.filter((v) => v.sellerId === sellerId).length;
-}
+// ---------------------------------------------------------------------------
+// Mocks mantidos — fases futuras (Leads, Dashboard, Roleta).
+// ---------------------------------------------------------------------------
 
 export function useLeads(): Lead[] {
   return LEADS;

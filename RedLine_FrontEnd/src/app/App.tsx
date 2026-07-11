@@ -87,7 +87,9 @@ function Shell() {
   const [tab, setTab] = useState<Tab>("home");
   const [openVehicleId, setOpenVehicleId] = useState<string | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
-  const vehicle = useCar(openVehicleId ?? "");
+  const { vehicle, loading: vehicleLoading, error: vehicleError } = useCar(
+    openVehicleId ?? undefined
+  );
 
   const goTab = (t: Tab) => {
     setOpenVehicleId(null);
@@ -99,10 +101,12 @@ function Shell() {
       {!openVehicleId && <Header onMenu={() => goTab("dashboard")} />}
 
       <AnimatePresence mode="popLayout">
-        {openVehicleId && vehicle ? (
+        {openVehicleId ? (
           <motion.div key="detail">
             <VehicleDetailPage
               vehicle={vehicle}
+              loading={vehicleLoading}
+              error={vehicleError}
               onBack={() => setOpenVehicleId(null)}
               onContact={() => setLeadOpen(true)}
             />
@@ -124,7 +128,7 @@ function Shell() {
 
       {!openVehicleId && <BottomNav active={tab} onChange={goTab} />}
 
-      <LeadRouletteSheet open={leadOpen} onClose={() => setLeadOpen(false)} vehicle={vehicle} />
+      <LeadRouletteSheet open={leadOpen} onClose={() => setLeadOpen(false)} vehicle={vehicle ?? null} />
 
       {/* Nav desktop simples */}
       {!openVehicleId && (
