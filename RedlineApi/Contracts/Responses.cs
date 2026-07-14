@@ -45,3 +45,6 @@ public record PagedResult<T>(
     int PageSize,
     int TotalItems,
     int TotalPages);
+
+/// <summary>Faceta de marca para o catálogo dinâmico (§4.2).</summary>
+public record BrandFacetResponse(string Brand, int Count);

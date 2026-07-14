@@ -1,5 +1,8 @@
 // --- COMPONENTS: Filtros Pill horizontais (scroll lateral no mobile) ---
-export const FILTERS = ["Todos", "Modificados", "Originais", "McLaren", "Ferrari", "Nissan", "BMW", "Honda"];
+// RF-08: sem marcas hardcoded. Pills fixas + marcas dinâmicas de GET /api/vehicles/brands.
+import { useBrands } from "../hooks";
+
+const FIXED = ["Todos", "Modificados", "Originais"];
 
 export function FilterPills({
   active,
@@ -8,9 +11,12 @@ export function FilterPills({
   active: string;
   onChange: (f: string) => void;
 }) {
+  const { brands, loading } = useBrands();
+  const pills = [...FIXED, ...brands.map((b) => b.brand)];
+
   return (
     <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {FILTERS.map((f) => {
+      {pills.map((f) => {
         const on = active === f;
         return (
           <button
@@ -26,6 +32,14 @@ export function FilterPills({
           </button>
         );
       })}
+
+      {loading &&
+        Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={`sk-${i}`}
+            className="h-[44px] w-24 shrink-0 animate-pulse rounded-full bg-white/5"
+          />
+        ))}
     </div>
   );
 }

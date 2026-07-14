@@ -42,6 +42,23 @@ namespace Redline.Domain.Entities
         Perdido
     }
 
+    // Fundação de tenancy (RF-01 / §4). Uma loja agrega vendedores, veículos e leads.
+    public class Store
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public required string Name { get; set; }
+        public required string Slug { get; set; }
+        public required string City { get; set; }
+        public string? LogoUrl { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Navegações
+        public ICollection<User> Users { get; set; } = new List<User>();
+        public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+        public ICollection<Lead> Leads { get; set; } = new List<Lead>();
+    }
+
     public class User
     {
         public Guid Id { get; set; } = Guid.NewGuid();
@@ -52,6 +69,10 @@ namespace Redline.Domain.Entities
         public int MemberSince { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Tenancy — opcional (um Buyer pode não pertencer a loja alguma).
+        public Guid? StoreId { get; set; }
+        public Store? Store { get; set; }
 
         // Propriedades de Navegação
         public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
@@ -75,20 +96,24 @@ namespace Redline.Domain.Entities
         public required string Brand { get; set; }
         public required string Model { get; set; }
         public int Year { get; set; }
-        
+
         [Column(TypeName = "decimal(15,2)")]
         public decimal Price { get; set; }
         public int Mileage { get; set; }
         public TransmissionType Transmission { get; set; }
         public BuildStage Stage { get; set; }
         public VehicleTier Tier { get; set; }
-        
+
         // Mapeando a lista de imagens para JSON no EF Core 8+ usando primitive collections
         public List<string> Images { get; set; } = new();
-        
+
         public Guid SellerId { get; set; }
         public User? Seller { get; set; } // Propriedade de Navegação
-        
+
+        // Tenancy — obrigatório (todo anúncio pertence a uma loja).
+        public Guid StoreId { get; set; }
+        public Store? Store { get; set; }
+
         public required string Location { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -96,24 +121,28 @@ namespace Redline.Domain.Entities
         // Mapeando a classe CustomSpecs para a coluna JSONB
         // No DbContext (OnModelCreating), você usará: builder.Entity<Vehicle>().OwnsOne(v => v.CustomSpecs, cs => cs.ToJson());
         public CustomSpecs? CustomSpecs { get; set; }
-        
+
         public int Views { get; set; }
     }
 
     public class Lead
     {
         public Guid Id { get; set; } = Guid.NewGuid();
-        
+
         public Guid VehicleId { get; set; }
         public Vehicle? Vehicle { get; set; } // Propriedade de Navegação
-        
+
         public VehicleTier Tier { get; set; }
         public required string CustomerName { get; set; }
         public required string Message { get; set; }
-        
+
         public Guid AssignedSellerId { get; set; }
         public User? AssignedSeller { get; set; } // Propriedade de Navegação
-        
+
+        // Tenancy — obrigatório (lead sempre nasce dentro de uma loja).
+        public Guid StoreId { get; set; }
+        public Store? Store { get; set; }
+
         public LeadStatus Status { get; set; } = LeadStatus.Novo;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

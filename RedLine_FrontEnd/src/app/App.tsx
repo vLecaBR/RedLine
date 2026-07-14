@@ -10,20 +10,27 @@ import { LeadRouletteSheet } from "./components/LeadRouletteSheet";
 import { HomePage } from "./pages/HomePage";
 import { VehicleDetailPage } from "./pages/VehicleDetailPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { useCar } from "./hooks";
-import { VEHICLES } from "./data/mocks";
+import { useCar, useVehiclesByIds } from "./hooks";
 
-// --- PAGES: Favoritos ---
+// --- PAGES: Favoritos (RF-09: resolvido via API, sem leitura de mocks) ---
 function FavoritesPage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
   const { favorites } = useApp();
-  const cars = VEHICLES.filter((v) => favorites.includes(v.id));
+  const { cars, loading } = useVehiclesByIds(favorites);
+
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-24">
       <h1 className="text-white" style={{ fontWeight: 800 }}>
         Meus Favoritos
       </h1>
       <p className="mt-1 text-sm text-slate-400">{cars.length} veículo(s) salvos</p>
-      {cars.length === 0 ? (
+
+      {loading && favorites.length > 0 ? (
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: favorites.length }).map((_, i) => (
+            <div key={i} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />
+          ))}
+        </div>
+      ) : cars.length === 0 ? (
         <div className="mt-16 flex flex-col items-center text-center text-slate-500">
           <Heart className="h-12 w-12" />
           <p className="mt-3">Nenhum favorito ainda. Toque no coração de um anúncio.</p>
@@ -109,6 +116,7 @@ function Shell() {
               error={vehicleError}
               onBack={() => setOpenVehicleId(null)}
               onContact={() => setLeadOpen(true)}
+              onOpenVehicle={setOpenVehicleId}
             />
           </motion.div>
         ) : (

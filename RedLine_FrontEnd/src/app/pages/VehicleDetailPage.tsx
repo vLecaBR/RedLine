@@ -18,9 +18,10 @@ import {
 import type { Vehicle } from "../types";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { Badge } from "../components/Badge";
+import { VehicleCard } from "../components/VehicleCard";
 import { SpecAccordion } from "../components/SpecAccordion";
 import { formatPrice, formatKm, stageBadgeClass } from "../lib/format";
-import { useSeller } from "../hooks";
+import { useSeller, useSellerVehicles } from "../hooks";
 import { useApp } from "../store";
 
 const AVATAR_FALLBACK =
@@ -32,16 +33,24 @@ export function VehicleDetailPage({
   error,
   onBack,
   onContact,
+  onOpenVehicle,
 }: {
   vehicle?: Vehicle;
   loading?: boolean;
   error?: unknown;
   onBack: () => void;
   onContact: () => void;
+  onOpenVehicle?: (id: string) => void;
 }) {
   const { isFavorite, toggleFavorite } = useApp();
   const { seller } = useSeller(vehicle?.sellerId);
   const [activeImg, setActiveImg] = useState(0);
+  const [showSellerCars, setShowSellerCars] = useState(false);
+
+  // Só busca quando o usuário clica em "Ver mais…" (RF-10).
+  const { cars: sellerCars, loading: sellerLoading } = useSellerVehicles(
+    showSellerCars ? vehicle?.sellerId : undefined
+  );
 
   // Estado de carregamento: skeleton enquanto o GET não resolve.
   if (loading) {
@@ -83,6 +92,7 @@ export function VehicleDetailPage({
   }
 
   const fav = isFavorite(vehicle.id);
+  const otherSellerCars = sellerCars.filter((v) => v.id !== vehicle.id);
 
   const facts = [
     { icon: Calendar, label: "Ano", value: String(vehicle.year) },
@@ -219,9 +229,40 @@ export function VehicleDetailPage({
                 <p className="text-sm text-slate-400">Na plataforma desde {seller.memberSince}</p>
               </div>
             </div>
-            <button className="mt-4 min-h-[44px] w-full rounded-xl border border-white/10 bg-white/5 text-sm text-slate-200 transition hover:border-white/25">
-              Ver mais {seller.vehicleCount} veículos deste vendedor
-            </button>
+
+            {/* RF-10: "Ver mais N veículos deste vendedor" consome GET /api/sellers/{id}/vehicles */}
+            {!showSellerCars ? (
+              <button
+                onClick={() => setShowSellerCars(true)}
+                className="mt-4 min-h-[44px] w-full rounded-xl border border-white/10 bg-white/5 text-sm text-slate-200 transition hover:border-white/25"
+              >
+                Ver mais {seller.vehicleCount} veículos deste vendedor
+              </button>
+            ) : (
+              <div className="mt-4">
+                {sellerLoading ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <div key={i} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />
+                    ))}
+                  </div>
+                ) : otherSellerCars.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    Este vendedor não tem outros anúncios no momento.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {otherSellerCars.map((v) => (
+                      <VehicleCard
+                        key={v.id}
+                        vehicle={v}
+                        onOpen={(id) => onOpenVehicle?.(id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

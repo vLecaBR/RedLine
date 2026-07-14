@@ -5,20 +5,75 @@
 import { useState } from "react";
 import useSWR from "swr";
 import type { Vehicle, User, Lead, PublicSeller } from "./types";
-import { fetcher, type PagedResult } from "./lib/api";
+import { fetcher, buildQuery, type PagedResult } from "./lib/api";
 import { LEADS, SELLERS, KPIS } from "./data/mocks";
 
+export interface CarFilters {
+  q?: string;
+  filter?: string;
+  tier?: string;
+  transmission?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sellerId?: string;
+  storeId?: string;
+  sort?: "recent" | "priceAsc" | "priceDesc" | "views";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface BrandFacet {
+  brand: string;
+  count: number;
+}
+
 /**
- * Lista da vitrine. O filtro agora é server-side (query param) — sem filtragem no cliente.
- * Mantém a assinatura { cars, loading } para não quebrar a HomePage; expõe `error` opcionalmente.
+ * Lista da vitrine. O filtro/busca/ordenação agora é server-side (query params).
+ * Mantém a assinatura { cars, loading } para não quebrar a HomePage; expõe `error` e `total`.
  */
-export function useCars(filter?: string) {
-  const f = filter && filter.length > 0 ? filter : "Todos";
+export function useCars(filters: CarFilters = {}) {
+  const query = buildQuery({ filter: "Todos", ...filters });
   const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(
-    `/api/vehicles?filter=${encodeURIComponent(f)}`,
+    `/api/vehicles${query}`,
     fetcher
   );
-  return { cars: data?.items ?? [], loading: isLoading, error };
+  return {
+    cars: data?.items ?? [],
+    total: data?.totalItems ?? 0,
+    loading: isLoading,
+    error,
+  };
+}
+
+/** Catálogo de marcas dinâmico (RF-06/RF-08). */
+export function useBrands() {
+  const { data, isLoading, error } = useSWR<BrandFacet[]>(
+    "/api/vehicles/brands",
+    fetcher
+  );
+  return { brands: data ?? [], loading: isLoading, error };
+}
+
+/** Anúncios de um vendedor, paginado (RF-07/RF-10). */
+export function useSellerVehicles(id?: string, page = 1, pageSize = 12) {
+  const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(
+    id ? `/api/sellers/${id}/vehicles${buildQuery({ page, pageSize })}` : null,
+    fetcher
+  );
+  return {
+    cars: data?.items ?? [],
+    total: data?.totalItems ?? 0,
+    loading: isLoading,
+    error,
+  };
+}
+
+/** Resolve favoritos via API a partir de uma lista de ids (RF-09). */
+export function useVehiclesByIds(ids: string[]) {
+  const key = ids.length ? `/api/vehicles${buildQuery({ pageSize: 50 })}` : null;
+  const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(key, fetcher);
+  const cars = (data?.items ?? []).filter((v) => ids.includes(v.id));
+  return { cars, loading: isLoading, error };
 }
 
 /** Detalhe de um veículo. Assíncrono (antes era síncrono sobre o mock). */

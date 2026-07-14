@@ -1,7 +1,7 @@
 // --- PAGES: Home ("A Vitrine Inteligente") ---
 import { useState } from "react";
 import { motion } from "motion/react";
-import { PlusCircle, Sparkles } from "lucide-react";
+import { PlusCircle, Sparkles, Search } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { VehicleCard } from "../components/VehicleCard";
 import { FilterPills } from "../components/FilterPills";
@@ -10,9 +10,18 @@ import { useCars } from "../hooks";
 const HERO_IMG =
   "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600";
 
+type Sort = "recent" | "priceAsc" | "priceDesc" | "views";
+
 export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
   const [filter, setFilter] = useState("Todos");
-  const { cars, loading, error } = useCars(filter);
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<Sort>("recent");
+
+  const { cars, loading, error } = useCars({
+    filter,
+    q: q.trim() || undefined,
+    sort,
+  });
 
   return (
     <div className="pb-8">
@@ -64,7 +73,30 @@ export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => voi
 
       {/* VITRINE */}
       <section className="mx-auto max-w-6xl px-4">
-        <div className="sticky top-[64px] z-30 -mx-4 bg-slate-900/80 px-4 py-3 backdrop-blur-md">
+        <div className="sticky top-[64px] z-30 -mx-4 space-y-3 bg-slate-900/80 px-4 py-3 backdrop-blur-md">
+          {/* Busca (q) + ordenação (sort) ligadas aos params */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por título, marca ou modelo…"
+                className="h-11 w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none"
+              />
+            </div>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as Sort)}
+              className="h-11 shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-slate-200 focus:border-orange-500/60 focus:outline-none"
+            >
+              <option value="recent">Mais recentes</option>
+              <option value="priceAsc">Menor preço</option>
+              <option value="priceDesc">Maior preço</option>
+              <option value="views">Mais vistos</option>
+            </select>
+          </div>
+
           <FilterPills active={filter} onChange={setFilter} />
         </div>
 
@@ -80,6 +112,10 @@ export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => voi
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="aspect-[4/3] animate-pulse rounded-2xl bg-white/5" />
             ))}
+          </div>
+        ) : cars.length === 0 ? (
+          <div className="mt-16 text-center text-slate-400">
+            Nenhum veículo encontrado para os filtros atuais.
           </div>
         ) : (
           <motion.div

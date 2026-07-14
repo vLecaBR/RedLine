@@ -52,28 +52,40 @@ app.Run();
 
 
 // ---------------------------------------------------------------------------
-// SEED (dev): 3 vendedores + 6 veículos com GUIDs reais (espelham os mocks do front).
+// SEED (dev): 1 loja + 3 vendedores + 6 veículos, todos com StoreId (RF-01).
 // ---------------------------------------------------------------------------
 static async Task SeedAsync(WebApplication app)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Em dev sem migrations, garante o schema. Em produção, troque por db.Database.MigrateAsync().
-    await db.Database.EnsureCreatedAsync();
+    // RNF-07: evolução por Migrations (fim do EnsureCreated). Aplica a migration em dev.
+    await db.Database.MigrateAsync();
 
     if (await db.Vehicles.AnyAsync()) return; // idempotente
+
+    // Loja padrão (RF-01)
+    var storeId = new Guid("5100e000-0000-0000-0000-000000000001");
+    db.Stores.Add(new Store
+    {
+        Id = storeId,
+        Name = "Garagem Redline",
+        Slug = "garagem-redline",
+        City = "São Paulo",
+        CreatedAt = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+        UpdatedAt = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+    });
 
     var joao   = new Guid("1a2b3c4d-0000-0000-0000-000000000001");
     var bianca = new Guid("1a2b3c4d-0000-0000-0000-000000000002");
     var diego  = new Guid("1a2b3c4d-0000-0000-0000-000000000003");
 
     db.Users.AddRange(
-        new User { Id = joao,   Name = "João Mendes",     Email = "joao@garagem.dev",   Role = UserRole.Seller, MemberSince = 2021,
+        new User { Id = joao,   Name = "João Mendes",     Email = "joao@garagem.dev",   Role = UserRole.Seller, MemberSince = 2021, StoreId = storeId,
                    AvatarUrl = "https://images.unsplash.com/photo-1595558848762-e5ab72171957?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200" },
-        new User { Id = bianca, Name = "Bianca Rocha",     Email = "bianca@garagem.dev", Role = UserRole.Seller, MemberSince = 2022,
+        new User { Id = bianca, Name = "Bianca Rocha",     Email = "bianca@garagem.dev", Role = UserRole.Seller, MemberSince = 2022, StoreId = storeId,
                    AvatarUrl = "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200" },
-        new User { Id = diego,  Name = "Diego Nakamura",   Email = "diego@garagem.dev",  Role = UserRole.Seller, MemberSince = 2020,
+        new User { Id = diego,  Name = "Diego Nakamura",   Email = "diego@garagem.dev",  Role = UserRole.Seller, MemberSince = 2020, StoreId = storeId,
                    AvatarUrl = "https://images.unsplash.com/photo-1623346483743-b968a27ed34c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=200" });
 
     const string img1 = "https://images.unsplash.com/photo-1555532686-d0fccaccadcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080";
@@ -86,7 +98,7 @@ static async Task SeedAsync(WebApplication app)
             Title = "McLaren P1 Track Edition", Brand = "McLaren", Model = "P1", Year = 2021,
             Price = 4_890_000m, Mileage = 8_200, Transmission = TransmissionType.DCT,
             Stage = BuildStage.Stage2, Tier = VehicleTier.A, Views = 3_120,
-            Images = new() { img1, bay }, SellerId = joao, Location = "São Paulo, SP",
+            Images = new() { img1, bay }, SellerId = joao, StoreId = storeId, Location = "São Paulo, SP",
             CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Remap ECU dedicada", "Downpipe Akrapovic titânio", "Intercooler frontal" },
@@ -100,7 +112,7 @@ static async Task SeedAsync(WebApplication app)
             Price = 3_250_000m, Mileage = 14_500, Transmission = TransmissionType.DCT,
             Stage = BuildStage.Original, Tier = VehicleTier.A, Views = 2_410,
             Images = new() { "https://images.unsplash.com/photo-1596639410348-8470f7fa9f84?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
-            SellerId = bianca, Location = "Rio de Janeiro, RJ",
+            SellerId = bianca, StoreId = storeId, Location = "Rio de Janeiro, RJ",
             CreatedAt = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Motor de fábrica lacrado" },
@@ -113,7 +125,7 @@ static async Task SeedAsync(WebApplication app)
             Price = 890_000m, Mileage = 42_000, Transmission = TransmissionType.DCT,
             Stage = BuildStage.Stage3, Tier = VehicleTier.B, Views = 5_890,
             Images = new() { "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", bay2 },
-            SellerId = diego, Location = "Curitiba, PR",
+            SellerId = diego, StoreId = storeId, Location = "Curitiba, PR",
             CreatedAt = new DateTime(2026, 7, 4, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Turbos híbridos Garrett", "Bicos 1300cc", "Coletor de admissão custom", "Flex fuel E85" },
@@ -127,7 +139,7 @@ static async Task SeedAsync(WebApplication app)
             Price = 5_600_000m, Mileage = 9_800, Transmission = TransmissionType.Sequencial,
             Stage = BuildStage.Stage1, Tier = VehicleTier.A, Views = 4_020,
             Images = new() { "https://images.unsplash.com/photo-1595558883521-062b300985e5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
-            SellerId = joao, Location = "São Paulo, SP",
+            SellerId = joao, StoreId = storeId, Location = "São Paulo, SP",
             CreatedAt = new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Escapamento Capristo válvulas", "Filtros de ar esportivos" },
@@ -141,7 +153,7 @@ static async Task SeedAsync(WebApplication app)
             Price = 385_000m, Mileage = 21_000, Transmission = TransmissionType.Manual,
             Stage = BuildStage.Stage2, Tier = VehicleTier.C, Views = 1_980,
             Images = new() { "https://images.unsplash.com/photo-1674133461006-5db277b238e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", bay2 },
-            SellerId = bianca, Location = "Belo Horizonte, MG",
+            SellerId = bianca, StoreId = storeId, Location = "Belo Horizonte, MG",
             CreatedAt = new DateTime(2026, 7, 6, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Downpipe Invidia", "Remap Hondata", "Intake Eventuri carbono" },
@@ -155,7 +167,7 @@ static async Task SeedAsync(WebApplication app)
             Price = 720_000m, Mileage = 12_300, Transmission = TransmissionType.DCT,
             Stage = BuildStage.Stage1, Tier = VehicleTier.B, Views = 2_650,
             Images = new() { "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
-            SellerId = diego, Location = "Porto Alegre, RS",
+            SellerId = diego, StoreId = storeId, Location = "Porto Alegre, RS",
             CreatedAt = new DateTime(2026, 7, 8, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
                 Engine = new() { "Stage 1 bootmod3", "Charge pipes upgrade" },

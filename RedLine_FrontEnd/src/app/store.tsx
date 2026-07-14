@@ -16,7 +16,7 @@ const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user] = useState<User>(CURRENT_USER);
-  const [favorites, setFavorites] = useState<string[]>(["v-03"]);
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   const toggleFavorite = useCallback((vehicleId: string) => {
     setFavorites((prev) =>
