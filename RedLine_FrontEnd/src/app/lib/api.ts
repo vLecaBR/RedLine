@@ -50,6 +50,34 @@ export async function fetcher<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * POST JSON genérico. Trata ProblemDetails (RFC 7807) igual ao `fetcher`,
+ * lançando `ApiError` com o `detail` e o `status` para o chamador tratar (400/404/409).
+ */
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    let problem: ProblemDetails | undefined;
+    try {
+      problem = (await res.json()) as ProblemDetails;
+    } catch {
+      /* corpo não-JSON: mantém undefined */
+    }
+    throw new ApiError(problem?.detail ?? `Erro ${res.status}`, res.status, problem);
+  }
+
+  // 201/200 com corpo JSON. (Não esperamos 204 aqui.)
+  return (await res.json()) as T;
+}
+
 /** Monta querystring a partir de um objeto, ignorando chaves vazias/undefined/null. */
 export function buildQuery(
   params: Record<string, string | number | boolean | null | undefined>

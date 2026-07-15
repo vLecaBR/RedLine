@@ -1,11 +1,25 @@
 // --- COMPONENTS: Modal Inteligente de Lead / WhatsApp (roleta) ---
-import { useEffect } from "react";
+// Fase 2: coleta nome/mensagem, persiste via POST /api/leads e revela o vendedor
+// REAL retornado pela API. A animação da roleta roda sobre a resposta (sem sorteio local).
+import { useEffect, useState } from "react";
 import confetti from "canvas-confetti";
 import { motion } from "motion/react";
-import { Loader2, MessageCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, MessageCircle, CheckCircle2, Send } from "lucide-react";
+import { toast } from "sonner";
 import type { Vehicle } from "../types";
 import { BottomSheet } from "./BottomSheet";
 import { useLeadDistribution } from "../hooks";
+import { ApiError } from "../lib/api";
+
+/** Iniciais para o avatar (a API de lead não retorna foto do vendedor — só o nome). */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
 export function LeadRouletteSheet({
   open,
@@ -17,11 +31,16 @@ export function LeadRouletteSheet({
   vehicle: Vehicle | null;
 }) {
   const { loading, assignedSeller, distribute, reset } = useLeadDistribution();
+  const [customerName, setCustomerName] = useState("");
+  const [message, setMessage] = useState("");
 
-  // Inicia a roleta ao abrir.
+  // Limpa o formulário e o estado da roleta ao fechar.
   useEffect(() => {
-    if (open) distribute();
-    else reset();
+    if (!open) {
+      reset();
+      setCustomerName("");
+      setMessage("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -37,9 +56,69 @@ export function LeadRouletteSheet({
     }
   }, [assignedSeller]);
 
+  const canSubmit =
+    !!vehicle && customerName.trim().length > 0 && message.trim().length > 0 && !loading;
+
+  const handleSubmit = async () => {
+    if (!vehicle) return;
+    try {
+      await distribute(vehicle.id, customerName.trim(), message.trim());
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? e.status === 409
+            ? "Nenhum consultor disponível nesta loja no momento."
+            : e.status === 404
+            ? "Este veículo não está mais disponível."
+            : e.status === 400
+            ? "Preencha seu nome e uma mensagem válida."
+            : e.message
+          : "Não foi possível enviar seu contato. Tente novamente.";
+      toast.error(msg);
+    }
+  };
+
+  const showForm = !loading && !assignedSeller;
+
   return (
     <BottomSheet open={open} onClose={onClose} title="Conectando você a um consultor">
       <div className="flex flex-col items-center py-4 text-center">
+        {showForm && (
+          <div className="w-full text-left">
+            <p className="text-sm text-slate-400">
+              Deixe seu contato para o {vehicle?.title}
+              {vehicle ? ` (Tier ${vehicle.tier})` : ""}. Vamos direcionar você ao melhor
+              consultor da loja.
+            </p>
+
+            <label className="mt-5 block text-xs text-slate-400">Seu nome</label>
+            <input
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Ex.: Marcos Vinícius"
+              className="mt-1.5 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 outline-none focus:border-cyan-400/60"
+            />
+
+            <label className="mt-4 block text-xs text-slate-400">Mensagem</label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={3}
+              placeholder="Ex.: Aceita troca por hatch? Tem laudo do dyno?"
+              className="mt-1.5 w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 outline-none focus:border-cyan-400/60"
+            />
+
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-orange-500 text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ fontWeight: 700 }}
+            >
+              <Send className="h-5 w-5" /> Chamar consultor
+            </button>
+          </div>
+        )}
+
         {loading && (
           <>
             <motion.div
@@ -75,16 +154,14 @@ export function LeadRouletteSheet({
             </span>
 
             <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-5">
-              <img
-                src={assignedSeller.avatarUrl}
-                alt={assignedSeller.name}
-                className="mx-auto h-20 w-20 rounded-full border-2 border-cyan-400/60 object-cover"
-              />
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-cyan-400/60 bg-cyan-400/10 text-cyan-200" style={{ fontWeight: 700, fontSize: 22 }}>
+                {initials(assignedSeller.assignedSellerName)}
+              </div>
               <p className="mt-3 text-white" style={{ fontWeight: 700 }}>
-                {assignedSeller.name}
+                {assignedSeller.assignedSellerName}
               </p>
               <p className="text-sm text-slate-400">
-                Consultor especialista · desde {assignedSeller.memberSince}
+                Enviado para {assignedSeller.assignedSellerName}
               </p>
             </div>
 

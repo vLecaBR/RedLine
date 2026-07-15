@@ -1,6 +1,71 @@
 @RedlineApi_HostAddress = http://localhost:5244
 
-GET {{RedlineApi_HostAddress}}/weatherforecast/
+### Vitrine (Fase 1) — sanity
+GET {{RedlineApi_HostAddress}}/api/vehicles?page=1&pageSize=6
 Accept: application/json
 
+### Pegar um vehicleId real para os testes de lead (copie o "id" do GT-R)
+GET {{RedlineApi_HostAddress}}/api/vehicles?q=GT-R
+Accept: application/json
+
+# -----------------------------------------------------------------------------
+# Fase 2 — Captura de Leads (POST /api/leads)
+# Substitua <VEHICLE_ID> por um id retornado acima (ex.: o Nissan GT-R Street Build).
+# -----------------------------------------------------------------------------
+
+### Caso feliz -> 201 LeadResponse (vehicleTitle + assignedSellerName)
+POST {{RedlineApi_HostAddress}}/api/leads
+Content-Type: application/json
+
+{
+  "vehicleId": "<VEHICLE_ID>",
+  "customerName": "Marcos Vinícius",
+  "message": "Aceita troca por hatch? Tem laudo do dyno?"
+}
+
+### Round-robin: repita o POST várias vezes no MESMO veículo
+### e confira que o assignedSellerName ALTERNA entre os vendedores da loja.
+POST {{RedlineApi_HostAddress}}/api/leads
+Content-Type: application/json
+
+{
+  "vehicleId": "<VEHICLE_ID>",
+  "customerName": "Ana Paula",
+  "message": "Tem histórico de manutenção?"
+}
+
+### 400 — message ausente/vazia
+POST {{RedlineApi_HostAddress}}/api/leads
+Content-Type: application/json
+
+{
+  "vehicleId": "<VEHICLE_ID>",
+  "customerName": "Sem Mensagem",
+  "message": "   "
+}
+
+### 400 — vehicleId ausente (Guid vazio)
+POST {{RedlineApi_HostAddress}}/api/leads
+Content-Type: application/json
+
+{
+  "vehicleId": "00000000-0000-0000-0000-000000000000",
+  "customerName": "Fulano",
+  "message": "Oi"
+}
+
+### 404 — veículo inexistente
+POST {{RedlineApi_HostAddress}}/api/leads
+Content-Type: application/json
+
+{
+  "vehicleId": "11111111-1111-1111-1111-111111111111",
+  "customerName": "Fulano",
+  "message": "Este veículo não existe"
+}
+
+###
+# 409 — loja sem vendedores elegíveis: para simular, no SQL Editor do Supabase mova
+# temporariamente os 3 vendedores para fora da loja (StoreId = NULL) ou troque o Role,
+# então repita o "Caso feliz". Reverta depois.
 ###

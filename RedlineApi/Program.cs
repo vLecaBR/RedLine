@@ -3,6 +3,7 @@ using Redline.Data;
 using Redline.Domain.Entities;
 using Redline.Endpoints;
 using Redline.Serialization;
+using Redline.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +14,9 @@ builder.Services.AddSwaggerGen();
 // EF Core / PostgreSQL (Supabase)
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Distribuição de leads (round-robin por loja, §3.4 / RNF-06). Scoped: usa o AppDbContext.
+builder.Services.AddScoped<ILeadDistributionService, RoundRobinLeadDistributionService>();
 
 // Serialização JSON do Minimal API:
 //  - enums como STRING (não inteiro)  -> bloqueador #1
@@ -47,6 +51,7 @@ app.UseCors(DevCors);
 
 app.MapGet("/", () => "API da Redline está online e conectada!");
 app.MapVehicleEndpoints();
+app.MapLeadEndpoints();
 
 app.Run();
 

@@ -48,3 +48,22 @@ public record PagedResult<T>(
 
 /// <summary>Faceta de marca para o catálogo dinâmico (§4.2).</summary>
 public record BrandFacetResponse(string Brand, int Count);
+
+/// <summary>
+/// DTO de lead (Fase 2 / RF-04 — resolve D1). Denormaliza <c>VehicleTitle</c> e
+/// <c>AssignedSellerName</c> para render direto no Dashboard. É um DTO de escrita/dashboard
+/// (não listagem pública): expõe <c>StoreId</c>/<c>AssignedSellerId</c> por design, mas NUNCA
+/// o e-mail do vendedor (RNF-10).
+/// </summary>
+public record LeadResponse(
+    Guid Id,
+    Guid VehicleId,
+    string VehicleTitle,
+    VehicleTier Tier,
+    Guid StoreId,
+    string CustomerName,
+    string Message,
+    Guid AssignedSellerId,
+    string AssignedSellerName,
+    LeadStatus Status,
+    DateTime CreatedAt);

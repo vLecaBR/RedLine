@@ -2,11 +2,11 @@
 // Vitrine/detalhe/vendedor: dados REAIS da RedlineApi via SWR.
 // Leads/KPIs/roleta: ainda mockados (fases futuras).
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import useSWR from "swr";
-import type { Vehicle, User, Lead, PublicSeller } from "./types";
-import { fetcher, buildQuery, type PagedResult } from "./lib/api";
-import { LEADS, SELLERS, KPIS } from "./data/mocks";
+import type { Vehicle, Lead, PublicSeller } from "./types";
+import { fetcher, postJson, buildQuery, ApiError, type PagedResult } from "./lib/api";
+import { LEADS, KPIS } from "./data/mocks";
 
 export interface CarFilters {
   q?: string;
@@ -95,7 +95,90 @@ export function useSeller(id?: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Mocks mantidos — fases futuras (Leads, Dashboard, Roleta).
+// Leads (Fase 2) — criação real via POST /api/leads.
+// ---------------------------------------------------------------------------
+
+export interface CreateLeadInput {
+  vehicleId: string;
+  customerName: string;
+  message: string;
+}
+
+/**
+ * Mutação de criação de lead (RF-01). `POST /api/leads` via `postJson`,
+ * que já traduz ProblemDetails para `ApiError` (400/404/409).
+ */
+export function useCreateLead() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const createLead = useCallback(async (input: CreateLeadInput): Promise<Lead> => {
+    setLoading(true);
+    setError(null);
+    try {
+      return await postJson<Lead>("/api/leads", input);
+    } catch (e) {
+      if (e instanceof ApiError) setError(e);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { createLead, loading, error };
+}
+
+/** Espera mínima para a animação da roleta "respirar" mesmo com resposta rápida da API. */
+const ROULETTE_MIN_MS = 1400;
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Distribuição de leads via servidor (§3.4). A "roleta" deixa de sortear no cliente:
+ * `distribute` faz o `POST /api/leads` real e resolve com o `Lead` retornado (com o
+ * `assignedSellerName` de verdade). A animação do front roda SOBRE essa resposta.
+ *
+ * Mantém a assinatura usada pela LeadRouletteSheet ({ loading, assignedSeller, distribute, reset }),
+ * agora com `error` e `assignedSeller: Lead | null`.
+ */
+export function useLeadDistribution() {
+  const { createLead } = useCreateLead();
+  const [loading, setLoading] = useState(false);
+  const [assignedSeller, setAssignedSeller] = useState<Lead | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const distribute = useCallback(
+    async (vehicleId: string, customerName: string, message: string): Promise<Lead> => {
+      setLoading(true);
+      setAssignedSeller(null);
+      setError(null);
+      try {
+        const [lead] = await Promise.all([
+          createLead({ vehicleId, customerName, message }),
+          delay(ROULETTE_MIN_MS), // mínimo visual (não é sorteio local)
+        ]);
+        setAssignedSeller(lead);
+        return lead;
+      } catch (e) {
+        if (e instanceof ApiError) setError(e);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [createLead]
+  );
+
+  const reset = useCallback(() => {
+    setAssignedSeller(null);
+    setLoading(false);
+    setError(null);
+  }, []);
+
+  return { loading, assignedSeller, error, distribute, reset };
+}
+
+// ---------------------------------------------------------------------------
+// Mocks mantidos — fases futuras (Dashboard: Leads/KPIs).
 // ---------------------------------------------------------------------------
 
 export function useLeads(): Lead[] {
@@ -104,33 +187,4 @@ export function useLeads(): Lead[] {
 
 export function useKpis() {
   return KPIS;
-}
-
-/**
- * Simula a "roleta" de distribuição de leads: sorteia um consultor.
- * Retorna o vendedor sorteado após uma simulação de processamento.
- */
-export function useLeadDistribution() {
-  const [loading, setLoading] = useState(false);
-  const [assignedSeller, setAssignedSeller] = useState<User | null>(null);
-
-  const distribute = () => {
-    setLoading(true);
-    setAssignedSeller(null);
-    return new Promise<User>((resolve) => {
-      setTimeout(() => {
-        const picked = SELLERS[Math.floor(Math.random() * SELLERS.length)];
-        setAssignedSeller(picked);
-        setLoading(false);
-        resolve(picked);
-      }, 2200);
-    });
-  };
-
-  const reset = () => {
-    setAssignedSeller(null);
-    setLoading(false);
-  };
-
-  return { loading, assignedSeller, distribute, reset };
 }
