@@ -118,12 +118,18 @@ public static class VehicleEndpoints
     // GET /api/vehicles/brands  (RF-06)
     private static async Task<IResult> GetBrands(AppDbContext db, CancellationToken ct)
     {
-        var brands = await db.Vehicles.AsNoTracking()
+        // Agrupa/conta no banco (traduz para GROUP BY); ordena e monta o DTO em memória
+        // para evitar problemas de tradução do OrderBy sobre o tipo projetado.
+        var grouped = await db.Vehicles.AsNoTracking()
             .GroupBy(v => v.Brand)
-            .Select(g => new BrandFacetResponse(g.Key, g.Count()))
-            .OrderByDescending(b => b.Count)
-            .ThenBy(b => b.Brand)
+            .Select(g => new { Brand = g.Key, Count = g.Count() })
             .ToListAsync(ct);
+
+        var brands = grouped
+            .OrderByDescending(b => b.Count)
+            .ThenBy(b => b.Brand, StringComparer.OrdinalIgnoreCase)
+            .Select(b => new BrandFacetResponse(b.Brand, b.Count))
+            .ToList();
 
         return Results.Ok(brands);
     }
