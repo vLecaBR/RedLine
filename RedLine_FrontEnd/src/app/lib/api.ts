@@ -136,6 +136,17 @@ export async function del(path: string): Promise<void> {
   // 204: nada a retornar.
 }
 
+/**
+ * POST sem corpo esperando `204 No Content` (Fase 6 — favoritos). Traduz ProblemDetails
+ * (RFC 7807) em `ApiError` (401/404) nas falhas.
+ */
+export async function postVoid(path: string): Promise<void> {
+  const res = await authFetch(path, { method: "POST" });
+  if (!res.ok) {
+    await toApiError(res);
+  }
+}
+
 /** Monta querystring a partir de um objeto, ignorando chaves vazias/undefined/null. */
 export function buildQuery(
   params: Record<string, string | number | boolean | null | undefined>

@@ -45,7 +45,6 @@ export function VehicleCard({
             {vehicle.stage !== "Original" && <Zap className="h-3 w-3" />}
             {vehicle.stage}
           </Badge>
-          <Badge className="border-white/15 bg-black/40 text-slate-200">Tier {vehicle.tier}</Badge>
         </div>
 
         {/* Favorito */}

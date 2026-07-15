@@ -20,6 +20,7 @@ import {
   patchJson,
   putJson,
   del,
+  postVoid,
   buildQuery,
   ApiError,
   type PagedResult,
@@ -29,7 +30,6 @@ import { supabase } from "./lib/supabase";
 export interface CarFilters {
   q?: string;
   filter?: string;
-  tier?: string;
   transmission?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -86,7 +86,51 @@ export function useSellerVehicles(id?: string, page = 1, pageSize = 12) {
   };
 }
 
-/** Resolve favoritos via API a partir de uma lista de ids (RF-09). */
+/**
+ * Favoritos persistidos (Fase 6). Quando logado, lê `GET /api/me/favorites` (VehicleResponse[])
+ * e as mutações batem em `POST`/`DELETE /api/me/favorites/{id}` (204), revalidando via SWR.
+ * Deslogado: cai para estado local em memória (heart continua clicável, sem persistir).
+ */
+export function useFavorites() {
+  const { isLoggedIn } = useMe();
+  const key = isLoggedIn ? "/api/me/favorites" : null;
+  const { data, isLoading, mutate } = useSWR<Vehicle[]>(key, fetcher);
+  const [localIds, setLocalIds] = useState<string[]>([]);
+
+  const serverVehicles = data ?? [];
+  const ids = isLoggedIn ? serverVehicles.map((v) => v.id) : localIds;
+
+  const isFavorite = useCallback((id: string) => ids.includes(id), [ids]);
+
+  const toggleFavorite = useCallback(
+    async (id: string): Promise<void> => {
+      if (!isLoggedIn) {
+        setLocalIds((prev) =>
+          prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        );
+        return;
+      }
+      const isFav = (data ?? []).some((v) => v.id === id);
+      try {
+        if (isFav) await del(`/api/me/favorites/${id}`);
+        else await postVoid(`/api/me/favorites/${id}`);
+      } finally {
+        await mutate(); // revalida com a verdade do servidor
+      }
+    },
+    [isLoggedIn, data, mutate]
+  );
+
+  return {
+    favoriteVehicles: serverVehicles,
+    favoriteIds: ids,
+    isFavorite,
+    toggleFavorite,
+    loading: !!key && isLoading,
+  };
+}
+
+/** Resolve favoritos via API a partir de uma lista de ids (fallback deslogado — RF-09). */
 export function useVehiclesByIds(ids: string[]) {
   const key = ids.length ? `/api/vehicles${buildQuery({ pageSize: 50 })}` : null;
   const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(key, fetcher);

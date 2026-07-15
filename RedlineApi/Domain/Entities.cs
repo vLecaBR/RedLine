@@ -21,10 +21,9 @@ namespace Redline.Domain.Entities
         [Display(Name = "Stage 1")] Stage1,
         [Display(Name = "Stage 2")] Stage2,
         [Display(Name = "Stage 3")] Stage3,
+        [Display(Name = "Stage 4")] Stage4,
         [Display(Name = "Full Build")] FullBuild
     }
-
-    public enum VehicleTier { A, B, C, D }
 
     public enum TransmissionType
     {
@@ -77,6 +76,21 @@ namespace Redline.Domain.Entities
         // Propriedades de Navegação
         public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
         public ICollection<Lead> AssignedLeads { get; set; } = new List<Lead>();
+        public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
+    }
+
+    // Favorito (Fase 6): relação N:N User↔Vehicle via join explícito (resolve D7).
+    public class Favorite
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public Guid UserId { get; set; }
+        public User? User { get; set; }
+
+        public Guid VehicleId { get; set; }
+        public Vehicle? Vehicle { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     // Classe auxiliar para mapear o JSONB do Entity Framework
@@ -102,7 +116,6 @@ namespace Redline.Domain.Entities
         public int Mileage { get; set; }
         public TransmissionType Transmission { get; set; }
         public BuildStage Stage { get; set; }
-        public VehicleTier Tier { get; set; }
 
         // Mapeando a lista de imagens para JSON no EF Core 8+ usando primitive collections
         public List<string> Images { get; set; } = new();
@@ -136,7 +149,6 @@ namespace Redline.Domain.Entities
         public Guid VehicleId { get; set; }
         public Vehicle? Vehicle { get; set; } // Propriedade de Navegação
 
-        public VehicleTier Tier { get; set; }
         public required string CustomerName { get; set; }
         public required string Message { get; set; }
 

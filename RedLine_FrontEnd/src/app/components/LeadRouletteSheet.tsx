@@ -86,8 +86,7 @@ export function LeadRouletteSheet({
         {showForm && (
           <div className="w-full text-left">
             <p className="text-sm text-slate-400">
-              Deixe seu contato para o {vehicle?.title}
-              {vehicle ? ` (Tier ${vehicle.tier})` : ""}. Vamos direcionar você ao melhor
+              Deixe seu contato para o {vehicle?.title}. Vamos direcionar você ao melhor
               consultor da loja.
             </p>
 
@@ -129,7 +128,7 @@ export function LeadRouletteSheet({
             </motion.div>
             <p className="mt-5 text-white">Buscando o melhor consultor...</p>
             <p className="mt-1 text-sm text-slate-400">
-              Distribuindo lead do {vehicle?.title} (Tier {vehicle?.tier})
+              Distribuindo lead do {vehicle?.title}
             </p>
             <div className="mt-6 h-1.5 w-56 overflow-hidden rounded-full bg-white/10">
               <motion.div

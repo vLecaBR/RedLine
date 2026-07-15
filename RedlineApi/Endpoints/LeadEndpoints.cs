@@ -51,7 +51,7 @@ public static class LeadEndpoints
         // --- Carregar o veículo (leitura pura) ou 404 (RNF-03) ---
         var vehicle = await db.Vehicles.AsNoTracking()
             .Where(v => v.Id == request.VehicleId)
-            .Select(v => new { v.Id, v.Title, v.Tier, v.StoreId })
+            .Select(v => new { v.Id, v.Title, v.StoreId })
             .FirstOrDefaultAsync(ct);
 
         if (vehicle is null)
@@ -74,7 +74,6 @@ public static class LeadEndpoints
         var lead = new Lead
         {
             VehicleId = vehicle.Id,
-            Tier = vehicle.Tier,
             StoreId = vehicle.StoreId,
             CustomerName = customerName,
             Message = message,
@@ -197,7 +196,6 @@ public static class LeadEndpoints
         l.Id,
         l.VehicleId,
         l.Vehicle != null ? l.Vehicle.Title : string.Empty,
-        l.Tier,
         l.StoreId,
         l.CustomerName,
         l.Message,

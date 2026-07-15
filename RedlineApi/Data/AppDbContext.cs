@@ -12,6 +12,7 @@ namespace Redline.Data
         public DbSet<User> Users { get; set; }
         public DbSet<Vehicle> Vehicles { get; set; }
         public DbSet<Lead> Leads { get; set; }
+        public DbSet<Favorite> Favorites { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -75,6 +76,23 @@ namespace Redline.Data
                 .WithMany(u => u.AssignedLeads)
                 .HasForeignKey(l => l.AssignedSellerId)
                 .OnDelete(DeleteBehavior.SetNull); // Se o vendedor for deletado, o Lead não é perdido
+
+            // --- Favorite (Fase 6): N:N User↔Vehicle, um par único por (UserId, VehicleId) ---
+            modelBuilder.Entity<Favorite>(e =>
+            {
+                e.HasOne(f => f.User)
+                    .WithMany(u => u.Favorites)
+                    .HasForeignKey(f => f.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasOne(f => f.Vehicle)
+                    .WithMany()
+                    .HasForeignKey(f => f.VehicleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // Idempotência do POST: não pode favoritar o mesmo veículo duas vezes.
+                e.HasIndex(f => new { f.UserId, f.VehicleId }).IsUnique();
+            });
         }
     }
 }

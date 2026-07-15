@@ -162,7 +162,6 @@ export function VehicleDetailPage({
               {vehicle.stage !== "Original" && <Zap className="h-3 w-3" />}
               {vehicle.stage}
             </Badge>
-            <Badge className="border-white/15 bg-white/5 text-slate-200">Tier {vehicle.tier}</Badge>
             {vehicle.customSpecs.hasDyno && (
               <Badge className="border-green-400/30 bg-green-400/10 text-green-300">
                 <BadgeCheck className="h-3 w-3" /> Dyno comprovado

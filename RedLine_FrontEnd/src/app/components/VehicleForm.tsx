@@ -1,29 +1,34 @@
-// --- VehicleForm (Fase 5 / §6.5) ---
+// --- VehicleForm (Fase 5 + ajustes) ---
 // Formulário de criação/edição de anúncio. Campos controlados, upload múltiplo de imagens
-// (preview + progresso) ao Supabase Storage, arrays de specs e validação client-side espelhando
-// a RNF-03. Submissão via useCreateVehicle/useUpdateVehicle; sucesso/erro via toast (sonner).
+// (preview + progresso) ao Supabase Storage, arrays de specs e validação client-side.
+// Ajustes: "stage" agora é "Tem remap?" (sim/não) + nível 1–4; localização puxa
+// estados/cidades da API do IBGE (selects em cascata); tier removido.
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { motion } from "motion/react";
 import { X, Upload, Loader2, Trash2, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
-import type {
-  Vehicle,
-  VehicleFormInput,
-  Transmission,
-  BuildStage,
-  VehicleTier,
-} from "../types";
+import type { Vehicle, VehicleFormInput, Transmission, BuildStage } from "../types";
 import { useApp } from "../store";
 import { useCreateVehicle, useUpdateVehicle } from "../hooks";
 import { uploadVehicleImage } from "../lib/storage";
 import { ApiError } from "../lib/api";
 
 const TRANSMISSIONS: Transmission[] = ["Manual", "Automático", "Sequencial", "DCT"];
-const STAGES: BuildStage[] = ["Original", "Stage 1", "Stage 2", "Stage 3", "Full Build"];
-const TIERS: VehicleTier[] = ["A", "B", "C", "D"];
+const STAGE_LEVELS = [1, 2, 3, 4] as const;
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+// --- IBGE ---
+interface IbgeUf {
+  id: number;
+  sigla: string;
+  nome: string;
+}
+interface IbgeCity {
+  id: number;
+  nome: string;
+}
 
 interface Props {
   mode: "create" | "edit";
@@ -40,11 +45,27 @@ const fromLines = (text: string) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+// stage "Stage 3" -> nível 3; qualquer não-remap -> null.
+function stageToLevel(stage: BuildStage): number | null {
+  const m = /^Stage (\d)$/.exec(stage);
+  return m ? Number(m[1]) : null;
+}
+
+// "Curitiba, PR" -> { city: "Curitiba", uf: "PR" }
+function parseLocation(loc?: string): { city: string; uf: string } {
+  if (!loc) return { city: "", uf: "" };
+  const idx = loc.lastIndexOf(",");
+  if (idx < 0) return { city: loc.trim(), uf: "" };
+  return { city: loc.slice(0, idx).trim(), uf: loc.slice(idx + 1).trim().toUpperCase() };
+}
+
 export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
   const { user } = useApp();
   const { createVehicle, loading: creating } = useCreateVehicle();
   const { updateVehicle, loading: updating } = useUpdateVehicle();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const initialLoc = useMemo(() => parseLocation(vehicle?.location), [vehicle]);
 
   const initial = useMemo<VehicleFormInput>(
     () => ({
@@ -56,7 +77,6 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
       mileage: vehicle?.mileage ?? 0,
       transmission: vehicle?.transmission ?? "Manual",
       stage: vehicle?.stage ?? "Original",
-      tier: vehicle?.tier ?? "B",
       images: vehicle?.images ?? [],
       location: vehicle?.location ?? "",
       customSpecs: {
@@ -77,11 +97,68 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Remap (substitui o antigo campo Stage).
+  const initialLevel = stageToLevel(initial.stage);
+  const [hasRemap, setHasRemap] = useState(initialLevel !== null);
+  const [stageLevel, setStageLevel] = useState<number>(initialLevel ?? 1);
+
+  // Localização (IBGE).
+  const [ufs, setUfs] = useState<IbgeUf[]>([]);
+  const [cities, setCities] = useState<IbgeCity[]>([]);
+  const [uf, setUf] = useState(initialLoc.uf);
+  const [city, setCity] = useState(initialLoc.city);
+  const [loadingCities, setLoadingCities] = useState(false);
+
   const busy = creating || updating || uploading;
+
+  // Deriva a stage a partir do remap.
+  const stage: BuildStage = hasRemap ? (`Stage ${stageLevel}` as BuildStage) : "Original";
 
   function set<K extends keyof VehicleFormInput>(key: K, value: VehicleFormInput[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
+
+  // Carrega os estados uma vez.
+  useEffect(() => {
+    let alive = true;
+    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome")
+      .then((r) => r.json())
+      .then((data: IbgeUf[]) => {
+        if (alive) setUfs(data);
+      })
+      .catch(() => {
+        if (alive) toast.error("Não foi possível carregar os estados (IBGE).");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Carrega as cidades quando a UF muda.
+  useEffect(() => {
+    if (!uf) {
+      setCities([]);
+      return;
+    }
+    let alive = true;
+    setLoadingCities(true);
+    fetch(
+      `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`
+    )
+      .then((r) => r.json())
+      .then((data: IbgeCity[]) => {
+        if (alive) setCities(data);
+      })
+      .catch(() => {
+        if (alive) toast.error("Não foi possível carregar as cidades (IBGE).");
+      })
+      .finally(() => {
+        if (alive) setLoadingCities(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [uf]);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -114,12 +191,13 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
     );
   }
 
-  // Validação client-side (espelha RNF-03). Retorna a 1ª mensagem de erro, ou null.
+  // Validação client-side. Retorna a 1ª mensagem de erro, ou null.
   function validate(): string | null {
     if (!form.title.trim()) return "Informe o título do anúncio.";
     if (!form.brand.trim()) return "Informe a marca.";
     if (!form.model.trim()) return "Informe o modelo.";
-    if (!form.location.trim()) return "Informe a localização.";
+    if (!uf) return "Selecione o estado.";
+    if (!city) return "Selecione a cidade.";
     if (!(form.price > 0)) return "O preço deve ser maior que zero.";
     if (form.mileage < 0) return "A quilometragem não pode ser negativa.";
     if (form.year < 1900 || form.year > CURRENT_YEAR + 1)
@@ -144,7 +222,8 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
       title: form.title.trim(),
       brand: form.brand.trim(),
       model: form.model.trim(),
-      location: form.location.trim(),
+      stage,
+      location: `${city}, ${uf}`,
       customSpecs: {
         engine: fromLines(engineText),
         suspension: fromLines(suspText),
@@ -172,6 +251,12 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
   const inputCls =
     "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-orange-500/60";
   const labelCls = "mb-1 block text-xs font-medium text-slate-400";
+
+  // Garante que a cidade pré-selecionada (modo edição) apareça mesmo antes da lista carregar.
+  const cityOptions =
+    city && !cities.some((c) => c.nome === city)
+      ? [{ id: -1, nome: city } as IbgeCity, ...cities]
+      : cities;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
@@ -291,8 +376,8 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
           </div>
         </div>
 
-        {/* Transmissão / Stage / Tier */}
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        {/* Transmissão / Remap */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Transmissão</label>
             <select
@@ -308,44 +393,73 @@ export function VehicleForm({ mode, vehicle, onClose, onSaved }: Props) {
             </select>
           </div>
           <div>
-            <label className={labelCls}>Stage</label>
+            <label className={labelCls}>Preparação</label>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={hasRemap}
+                  onChange={(e) => setHasRemap(e.target.checked)}
+                />
+                Tem remap?
+              </label>
+              {hasRemap && (
+                <select
+                  className={inputCls}
+                  value={stageLevel}
+                  onChange={(e) => setStageLevel(Number(e.target.value))}
+                >
+                  {STAGE_LEVELS.map((n) => (
+                    <option key={n} value={n} className="bg-slate-900">
+                      Stage {n}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Localização (IBGE) */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Estado *</label>
             <select
               className={inputCls}
-              value={form.stage}
-              onChange={(e) => set("stage", e.target.value as BuildStage)}
+              value={uf}
+              onChange={(e) => {
+                setUf(e.target.value);
+                setCity(""); // troca de UF zera a cidade
+              }}
             >
-              {STAGES.map((s) => (
-                <option key={s} value={s} className="bg-slate-900">
-                  {s}
+              <option value="" className="bg-slate-900">
+                {ufs.length ? "Selecione…" : "Carregando…"}
+              </option>
+              {ufs.map((u) => (
+                <option key={u.id} value={u.sigla} className="bg-slate-900">
+                  {u.nome} ({u.sigla})
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Tier</label>
+            <label className={labelCls}>Cidade *</label>
             <select
               className={inputCls}
-              value={form.tier}
-              onChange={(e) => set("tier", e.target.value as VehicleTier)}
+              value={city}
+              disabled={!uf || loadingCities}
+              onChange={(e) => setCity(e.target.value)}
             >
-              {TIERS.map((t) => (
-                <option key={t} value={t} className="bg-slate-900">
-                  {t}
+              <option value="" className="bg-slate-900">
+                {!uf ? "Escolha o estado" : loadingCities ? "Carregando…" : "Selecione…"}
+              </option>
+              {cityOptions.map((c) => (
+                <option key={c.id} value={c.nome} className="bg-slate-900">
+                  {c.nome}
                 </option>
               ))}
             </select>
           </div>
-        </div>
-
-        {/* Localização */}
-        <div className="mt-3">
-          <label className={labelCls}>Localização *</label>
-          <input
-            className={inputCls}
-            value={form.location}
-            onChange={(e) => set("location", e.target.value)}
-            placeholder="Ex.: Curitiba, PR"
-          />
         </div>
 
         {/* Specs */}

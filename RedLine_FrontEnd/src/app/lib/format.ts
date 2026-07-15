@@ -31,7 +31,8 @@ const STAGE_COLORS: Record<string, string> = {
   "Stage 1": "text-orange-300 border-orange-400/40 bg-orange-400/10",
   "Stage 2": "text-orange-300 border-orange-400/40 bg-orange-400/10",
   "Stage 3": "text-orange-200 border-orange-500/50 bg-orange-500/15",
-  "Full Build": "text-orange-100 border-orange-500/60 bg-orange-500/20",
+  "Stage 4": "text-orange-100 border-orange-500/60 bg-orange-500/20",
+  "Full Build": "text-orange-100 border-orange-500/70 bg-orange-500/25",
 };
 
 export function stageBadgeClass(stage: string): string {

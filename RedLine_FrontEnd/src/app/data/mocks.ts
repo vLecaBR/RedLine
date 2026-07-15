@@ -59,9 +59,7 @@ export const VEHICLES: Vehicle[] = [
     price: 4890000,
     mileage: 8200,
     transmission: "DCT",
-    stage: "Stage 2",
-    tier: "A",
-    images: [
+    stage: "Stage 2",    images: [
       "https://images.unsplash.com/photo-1555532686-d0fccaccadcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
       ENGINE_BAY,
     ],
@@ -86,9 +84,7 @@ export const VEHICLES: Vehicle[] = [
     price: 3250000,
     mileage: 14500,
     transmission: "DCT",
-    stage: "Original",
-    tier: "A",
-    images: [
+    stage: "Original",    images: [
       "https://images.unsplash.com/photo-1596639410348-8470f7fa9f84?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
     ],
     sellerId: "s-02",
@@ -111,9 +107,7 @@ export const VEHICLES: Vehicle[] = [
     price: 890000,
     mileage: 42000,
     transmission: "DCT",
-    stage: "Stage 3",
-    tier: "B",
-    images: [
+    stage: "Stage 3",    images: [
       "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
       ENGINE_BAY_2,
     ],
@@ -138,9 +132,7 @@ export const VEHICLES: Vehicle[] = [
     price: 5600000,
     mileage: 9800,
     transmission: "Sequencial",
-    stage: "Stage 1",
-    tier: "A",
-    images: [
+    stage: "Stage 1",    images: [
       "https://images.unsplash.com/photo-1595558883521-062b300985e5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
     ],
     sellerId: "s-01",
@@ -164,9 +156,7 @@ export const VEHICLES: Vehicle[] = [
     price: 385000,
     mileage: 21000,
     transmission: "Manual",
-    stage: "Stage 2",
-    tier: "C",
-    images: [
+    stage: "Stage 2",    images: [
       "https://images.unsplash.com/photo-1674133461006-5db277b238e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
       ENGINE_BAY_2,
     ],
@@ -191,9 +181,7 @@ export const VEHICLES: Vehicle[] = [
     price: 720000,
     mileage: 12300,
     transmission: "DCT",
-    stage: "Stage 1",
-    tier: "B",
-    images: [
+    stage: "Stage 1",    images: [
       "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080",
     ],
     sellerId: "s-03",

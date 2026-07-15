@@ -26,8 +26,7 @@ export interface Me {
   storeName: string | null;
 }
 
-export type BuildStage = "Original" | "Stage 1" | "Stage 2" | "Stage 3" | "Full Build";
-export type VehicleTier = "A" | "B" | "C" | "D";
+export type BuildStage = "Original" | "Stage 1" | "Stage 2" | "Stage 3" | "Stage 4" | "Full Build";
 export type Transmission = "Manual" | "Automático" | "Sequencial" | "DCT";
 
 // Especificações customizadas (o coração do nicho "gearhead").
@@ -49,7 +48,6 @@ export interface Vehicle {
   mileage: number; // km
   transmission: Transmission;
   stage: BuildStage;
-  tier: VehicleTier;
   images: string[];
   sellerId: string;
   location: string;
@@ -70,7 +68,6 @@ export interface VehicleFormInput {
   mileage: number;
   transmission: Transmission;
   stage: BuildStage;
-  tier: VehicleTier;
   images: string[];
   location: string;
   customSpecs: CustomSpecs;
@@ -98,7 +95,6 @@ export interface Lead {
   id: string;
   vehicleId: string;
   vehicleTitle: string;
-  tier: VehicleTier;
   storeId?: string; // §2.4/L8 — presente no contrato do Dashboard (GET/PATCH /api/leads)
   customerName: string;
   message: string;

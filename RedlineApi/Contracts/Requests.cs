@@ -34,7 +34,7 @@ public record CustomSpecsRequest(
 /// <summary>
 /// Payload de criação de veículo (Fase 5 / RF-01 / §4.1). O cliente NÃO envia
 /// <c>sellerId</c>/<c>storeId</c>/<c>views</c>/<c>isActive</c> — todos derivados no servidor (RNF-02).
-/// <c>Transmission</c>/<c>Stage</c>/<c>Tier</c> desserializam de string honrando [Display(Name)]
+/// <c>Transmission</c>/<c>Stage</c> desserializam de string honrando [Display(Name)]
 /// via o <c>DisplayNameEnumConverterFactory</c> global (RNF-05).
 /// </summary>
 public record CreateVehicleRequest(
@@ -46,7 +46,6 @@ public record CreateVehicleRequest(
     int Mileage,
     TransmissionType Transmission,
     BuildStage Stage,
-    VehicleTier Tier,
     List<string> Images,
     string Location,
     CustomSpecsRequest? CustomSpecs);
@@ -65,7 +64,6 @@ public record UpdateVehicleRequest(
     int Mileage,
     TransmissionType Transmission,
     BuildStage Stage,
-    VehicleTier Tier,
     List<string> Images,
     string Location,
     CustomSpecsRequest? CustomSpecs);

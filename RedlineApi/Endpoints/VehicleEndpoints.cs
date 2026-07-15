@@ -36,7 +36,6 @@ public static class VehicleEndpoints
         AppDbContext db,
         string? q = null,
         string? filter = "Todos",
-        string? tier = null,
         string? transmission = null,
         decimal? minPrice = null,
         decimal? maxPrice = null,
@@ -53,13 +52,6 @@ public static class VehicleEndpoints
         pageSize = Math.Clamp(pageSize, 1, 50);
 
         // --- Validação de enums/faixa -> 400 ProblemDetails (RNF-06) ---
-        VehicleTier? tierEnum = null;
-        if (!string.IsNullOrWhiteSpace(tier))
-        {
-            if (!TryParseDisplayEnum<VehicleTier>(tier, out var t)) return InvalidParam("tier", tier);
-            tierEnum = t;
-        }
-
         TransmissionType? transEnum = null;
         if (!string.IsNullOrWhiteSpace(transmission))
         {
@@ -96,7 +88,6 @@ public static class VehicleEndpoints
                 EF.Functions.ILike(v.Brand, $"%{term}%") ||
                 EF.Functions.ILike(v.Model, $"%{term}%"));
         }
-        if (tierEnum.HasValue) query = query.Where(v => v.Tier == tierEnum.Value);
         if (transEnum.HasValue) query = query.Where(v => v.Transmission == transEnum.Value);
         if (minPrice.HasValue) query = query.Where(v => v.Price >= minPrice.Value);
         if (maxPrice.HasValue) query = query.Where(v => v.Price <= maxPrice.Value);
@@ -243,9 +234,10 @@ public static class VehicleEndpoints
     }
 
     // Mapeamento entidade -> DTO, com coalescência de CustomSpecs para objeto vazio.
-    private static VehicleResponse ToResponse(Vehicle v) => new(
+    // internal: reusado pelo FavoriteEndpoints (Fase 6) para não divergir o contrato.
+    internal static VehicleResponse ToResponse(Vehicle v) => new(
         v.Id, v.Title, v.Brand, v.Model, v.Year, v.Price, v.Mileage,
-        v.Transmission, v.Stage, v.Tier, v.Images, v.SellerId, v.Location,
+        v.Transmission, v.Stage, v.Images, v.SellerId, v.Location,
         v.CreatedAt, v.Views,
         v.CustomSpecs is null
             ? new CustomSpecsResponse(new(), new(), new(), false, null)
@@ -273,10 +265,9 @@ public static class VehicleEndpoints
         var me = await currentUser.GetAsync(principal, ct);
         if (me?.StoreId is null) return Forbidden();
 
-        if (Validate(request?.Title, request?.Brand, request?.Model, request?.Location,
-                request?.Year ?? 0, request?.Price ?? 0, request?.Mileage ?? 0,
-                request?.Images, config, out var validationError) is false)
-            return validationError!;
+        var validationError = Validate(request?.Title, request?.Brand, request?.Model, request?.Location,
+            request?.Year ?? 0, request?.Price ?? 0, request?.Mileage ?? 0, request?.Images, config);
+        if (validationError is not null) return validationError;
 
         var now = DateTime.UtcNow;
         var vehicle = new Vehicle
@@ -289,7 +280,6 @@ public static class VehicleEndpoints
             Mileage = request.Mileage,
             Transmission = request.Transmission,
             Stage = request.Stage,
-            Tier = request.Tier,
             Images = request.Images.Select(i => i.Trim()).ToList(),
             Location = request.Location.Trim(),
             CustomSpecs = ToCustomSpecs(request.CustomSpecs),
@@ -321,10 +311,9 @@ public static class VehicleEndpoints
         var me = await currentUser.GetAsync(principal, ct);
         if (me?.StoreId is null) return Forbidden();
 
-        if (Validate(request?.Title, request?.Brand, request?.Model, request?.Location,
-                request?.Year ?? 0, request?.Price ?? 0, request?.Mileage ?? 0,
-                request?.Images, config, out var validationError) is false)
-            return validationError!;
+        var validationError = Validate(request?.Title, request?.Brand, request?.Model, request?.Location,
+            request?.Year ?? 0, request?.Price ?? 0, request?.Mileage ?? 0, request?.Images, config);
+        if (validationError is not null) return validationError;
 
         // Carrega COM tracking por Id E StoreId. Veículo de outra loja (ou inexistente) -> 404
         // (não vaza existência — §4.2).
@@ -345,7 +334,6 @@ public static class VehicleEndpoints
         vehicle.Mileage = request.Mileage;
         vehicle.Transmission = request.Transmission;
         vehicle.Stage = request.Stage;
-        vehicle.Tier = request.Tier;
         vehicle.Images = request.Images.Select(i => i.Trim()).ToList();
         vehicle.Location = request.Location.Trim();
         vehicle.CustomSpecs = ToCustomSpecs(request.CustomSpecs);
@@ -445,33 +433,28 @@ public static class VehicleEndpoints
         Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
             detail: "Usuário autenticado não está vinculado a uma loja.");
 
-    // Validação de entrada -> 400 ProblemDetails (RNF-03/04). Retorna false + preenche `error`.
-    private static bool Validate(
+    // Validação de entrada -> retorna um 400 ProblemDetails (RNF-03/04) ou null se válido.
+    private static IResult? Validate(
         string? title, string? brand, string? model, string? location,
         int year, decimal price, int mileage, List<string>? images,
-        IConfiguration config, out IResult? error)
+        IConfiguration config)
     {
-        IResult Bad(string detail)
-        {
-            error = Results.Problem(statusCode: StatusCodes.Status400BadRequest,
+        static IResult Bad(string detail) =>
+            Results.Problem(statusCode: StatusCodes.Status400BadRequest,
                 title: "Bad Request", detail: detail);
-            return error;
-        }
 
-        error = null;
+        if (string.IsNullOrWhiteSpace(title)) return Bad("'title' é obrigatório.");
+        if (string.IsNullOrWhiteSpace(brand)) return Bad("'brand' é obrigatório.");
+        if (string.IsNullOrWhiteSpace(model)) return Bad("'model' é obrigatório.");
+        if (string.IsNullOrWhiteSpace(location)) return Bad("'location' é obrigatório.");
 
-        if (string.IsNullOrWhiteSpace(title)) { Bad("'title' é obrigatório."); return false; }
-        if (string.IsNullOrWhiteSpace(brand)) { Bad("'brand' é obrigatório."); return false; }
-        if (string.IsNullOrWhiteSpace(model)) { Bad("'model' é obrigatório."); return false; }
-        if (string.IsNullOrWhiteSpace(location)) { Bad("'location' é obrigatório."); return false; }
-
-        if (price <= 0) { Bad("'price' deve ser maior que zero."); return false; }
-        if (mileage < 0) { Bad("'mileage' não pode ser negativo."); return false; }
+        if (price <= 0) return Bad("'price' deve ser maior que zero.");
+        if (mileage < 0) return Bad("'mileage' não pode ser negativo.");
 
         var maxYear = DateTime.UtcNow.Year + 1;
-        if (year < 1900 || year > maxYear) { Bad($"'year' deve estar entre 1900 e {maxYear}."); return false; }
+        if (year < 1900 || year > maxYear) return Bad($"'year' deve estar entre 1900 e {maxYear}.");
 
-        if (images is null || images.Count == 0) { Bad("'images' deve conter ao menos 1 URL."); return false; }
+        if (images is null || images.Count == 0) return Bad("'images' deve conter ao menos 1 URL.");
 
         // RNF-04: cada URL precisa apontar para o Storage do projeto e o bucket vehicle-images.
         var expectedPrefix = StoragePrefix(config);
@@ -479,13 +462,10 @@ public static class VehicleEndpoints
         {
             var u = url?.Trim();
             if (string.IsNullOrWhiteSpace(u) || !u.StartsWith(expectedPrefix, StringComparison.Ordinal))
-            {
-                Bad($"URL de imagem inválida. Esperado prefixo '{expectedPrefix}'.");
-                return false;
-            }
+                return Bad($"URL de imagem inválida. Esperado prefixo '{expectedPrefix}'.");
         }
 
-        return true;
+        return null;
     }
 
     // Deriva o prefixo público do bucket a partir de Supabase:ProjectRef (RNF-04).

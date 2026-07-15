@@ -2,9 +2,10 @@
 // Context para Usuário Logado (sessão REAL via Supabase + GET /api/me) + Favoritos.
 // Fase 3: o mock CURRENT_USER foi removido; `user` vem de `useMe` e pode ser null (deslogado).
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import type { Me } from "./types";
-import { useMe, useAuthActions } from "./hooks";
+import { createContext, useContext, useCallback, type ReactNode } from "react";
+import { toast } from "sonner";
+import type { Me, Vehicle } from "./types";
+import { useMe, useAuthActions, useFavorites } from "./hooks";
 
 interface AppState {
   user: Me | null;
@@ -12,7 +13,9 @@ interface AppState {
   loadingUser: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  favorites: string[];
+  favorites: string[]; // ids (servidor quando logado; local caso contrário)
+  favoriteVehicles: Vehicle[]; // veículos favoritados (só quando logado)
+  favoritesLoading: boolean;
   toggleFavorite: (vehicleId: string) => void;
   isFavorite: (vehicleId: string) => boolean;
 }
@@ -22,7 +25,13 @@ const AppContext = createContext<AppState | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const { me, loading, isLoggedIn, mutate } = useMe();
   const { signIn: doSignIn, signOut: doSignOut } = useAuthActions();
-  const [favorites, setFavorites] = useState<string[]>([]);
+  const {
+    favoriteVehicles,
+    favoriteIds,
+    isFavorite,
+    toggleFavorite: doToggleFavorite,
+    loading: favoritesLoading,
+  } = useFavorites();
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -37,15 +46,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await mutate(undefined, { revalidate: false }); // limpa o usuário no estado
   }, [doSignOut, mutate]);
 
-  const toggleFavorite = useCallback((vehicleId: string) => {
-    setFavorites((prev) =>
-      prev.includes(vehicleId) ? prev.filter((id) => id !== vehicleId) : [...prev, vehicleId]
-    );
-  }, []);
-
-  const isFavorite = useCallback(
-    (vehicleId: string) => favorites.includes(vehicleId),
-    [favorites]
+  // Mantém a assinatura síncrona esperada pelos componentes; trata erro com toast.
+  const toggleFavorite = useCallback(
+    (vehicleId: string) => {
+      doToggleFavorite(vehicleId).catch(() =>
+        toast.error("Não foi possível atualizar o favorito.")
+      );
+    },
+    [doToggleFavorite]
   );
 
   return (
@@ -56,7 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadingUser: loading,
         signIn,
         signOut,
-        favorites,
+        favorites: favoriteIds,
+        favoriteVehicles,
+        favoritesLoading,
         toggleFavorite,
         isFavorite,
       }}

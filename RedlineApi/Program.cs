@@ -128,6 +128,7 @@ app.MapVehicleEndpoints();
 app.MapLeadEndpoints();
 app.MapMeEndpoints();
 app.MapDashboardEndpoints();
+app.MapFavoriteEndpoints();
 
 app.Run();
 
@@ -178,7 +179,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "McLaren P1 Track Edition", Brand = "McLaren", Model = "P1", Year = 2021,
             Price = 4_890_000m, Mileage = 8_200, Transmission = TransmissionType.DCT,
-            Stage = BuildStage.Stage2, Tier = VehicleTier.A, Views = 3_120,
+            Stage = BuildStage.Stage2, Views = 3_120,
             Images = new() { img1, bay }, SellerId = joao, StoreId = storeId, Location = "São Paulo, SP",
             CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc),
             CustomSpecs = new CustomSpecs {
@@ -191,7 +192,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "Ferrari 488 Rosso Corsa", Brand = "Ferrari", Model = "488", Year = 2020,
             Price = 3_250_000m, Mileage = 14_500, Transmission = TransmissionType.DCT,
-            Stage = BuildStage.Original, Tier = VehicleTier.A, Views = 2_410,
+            Stage = BuildStage.Original, Views = 2_410,
             Images = new() { "https://images.unsplash.com/photo-1596639410348-8470f7fa9f84?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
             SellerId = bianca, StoreId = storeId, Location = "Rio de Janeiro, RJ",
             CreatedAt = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -204,7 +205,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "Nissan GT-R Street Build", Brand = "Nissan", Model = "GT-R R35", Year = 2018,
             Price = 890_000m, Mileage = 42_000, Transmission = TransmissionType.DCT,
-            Stage = BuildStage.Stage3, Tier = VehicleTier.B, Views = 5_890,
+            Stage = BuildStage.Stage3, Views = 5_890,
             Images = new() { "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", bay2 },
             SellerId = diego, StoreId = storeId, Location = "Curitiba, PR",
             CreatedAt = new DateTime(2026, 7, 4, 0, 0, 0, DateTimeKind.Utc),
@@ -218,7 +219,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "Lamborghini Aventador SV", Brand = "Lamborghini", Model = "Aventador", Year = 2019,
             Price = 5_600_000m, Mileage = 9_800, Transmission = TransmissionType.Sequencial,
-            Stage = BuildStage.Stage1, Tier = VehicleTier.A, Views = 4_020,
+            Stage = BuildStage.Stage1, Views = 4_020,
             Images = new() { "https://images.unsplash.com/photo-1595558883521-062b300985e5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
             SellerId = joao, StoreId = storeId, Location = "São Paulo, SP",
             CreatedAt = new DateTime(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc),
@@ -232,7 +233,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "Honda Civic Type R Turbo", Brand = "Honda", Model = "Civic Type R", Year = 2022,
             Price = 385_000m, Mileage = 21_000, Transmission = TransmissionType.Manual,
-            Stage = BuildStage.Stage2, Tier = VehicleTier.C, Views = 1_980,
+            Stage = BuildStage.Stage2, Views = 1_980,
             Images = new() { "https://images.unsplash.com/photo-1674133461006-5db277b238e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080", bay2 },
             SellerId = bianca, StoreId = storeId, Location = "Belo Horizonte, MG",
             CreatedAt = new DateTime(2026, 7, 6, 0, 0, 0, DateTimeKind.Utc),
@@ -246,7 +247,7 @@ static async Task SeedAsync(WebApplication app)
         {
             Title = "BMW M4 Competition Night", Brand = "BMW", Model = "M4", Year = 2023,
             Price = 720_000m, Mileage = 12_300, Transmission = TransmissionType.DCT,
-            Stage = BuildStage.Stage1, Tier = VehicleTier.B, Views = 2_650,
+            Stage = BuildStage.Stage1, Views = 2_650,
             IsActive = false, // Fase 5 (§8): 1 veículo arquivado no seed para exercitar a aba Estoque e o filtro da vitrine.
             Images = new() { "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
             SellerId = diego, StoreId = storeId, Location = "Porto Alegre, RS",
@@ -267,7 +268,7 @@ static async Task SeedAsync(WebApplication app)
     {
         var seeded = await db.Vehicles.AsNoTracking()
             .Where(v => v.StoreId == storeId)
-            .Select(v => new { v.Id, v.Title, v.Tier })
+            .Select(v => new { v.Id, v.Title })
             .ToListAsync();
 
         var byTitle = seeded.ToDictionary(v => v.Title, v => v);
@@ -288,7 +289,6 @@ static async Task SeedAsync(WebApplication app)
             db.Leads.Add(new Lead
             {
                 VehicleId = v.Id,
-                Tier = v.Tier,
                 StoreId = storeId,
                 CustomerName = r.customer,
                 Message = r.message,

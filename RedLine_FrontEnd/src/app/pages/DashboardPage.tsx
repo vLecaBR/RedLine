@@ -286,9 +286,6 @@ export function DashboardPage({
                     <div className="md:col-span-4">
                       <p className="flex items-center gap-2 text-sm text-slate-200">
                         {lead.vehicleTitle}
-                        <Badge className="border-white/15 bg-white/5 text-slate-300">
-                          Tier {lead.tier}
-                        </Badge>
                       </p>
                       <p className="truncate text-xs text-slate-500">{lead.message}</p>
                     </div>
@@ -443,7 +440,7 @@ function InventorySection({ onEdit }: { onEdit: (v: Vehicle) => void }) {
                     </Badge>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-400">
-                    {formatPrice(v.price)} · {formatKm(v.mileage)} · Tier {v.tier}
+                    {formatPrice(v.price)} · {formatKm(v.mileage)} · {v.stage}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

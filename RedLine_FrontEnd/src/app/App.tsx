@@ -15,8 +15,11 @@ import { useCar, useVehiclesByIds } from "./hooks";
 
 // --- PAGES: Favoritos (RF-09: resolvido via API, sem leitura de mocks) ---
 function FavoritesPage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
-  const { favorites } = useApp();
-  const { cars, loading } = useVehiclesByIds(favorites);
+  const { favorites, favoriteVehicles, favoritesLoading, isLoggedIn } = useApp();
+  // Logado: veículos vêm do servidor (Fase 6). Deslogado: resolve os ids locais via API.
+  const localFallback = useVehiclesByIds(isLoggedIn ? [] : favorites);
+  const cars = isLoggedIn ? favoriteVehicles : localFallback.cars;
+  const loading = isLoggedIn ? favoritesLoading : localFallback.loading;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-24">
