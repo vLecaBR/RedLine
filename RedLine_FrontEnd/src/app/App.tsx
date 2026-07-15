@@ -145,9 +145,13 @@ function ProfilePage({ onRequestLogin }: { onRequestLogin: () => void }) {
 function DashboardGuard({
   onBack,
   onRequestLogin,
+  autoCreate,
+  onConsumeAutoCreate,
 }: {
   onBack: () => void;
   onRequestLogin: () => void;
+  autoCreate?: boolean;
+  onConsumeAutoCreate?: () => void;
 }) {
   const { user, isLoggedIn, loadingUser } = useApp();
 
@@ -203,7 +207,13 @@ function DashboardGuard({
     );
   }
 
-  return <DashboardPage onBack={onBack} />;
+  return (
+    <DashboardPage
+      onBack={onBack}
+      autoCreate={autoCreate}
+      onConsumeAutoCreate={onConsumeAutoCreate}
+    />
+  );
 }
 
 function Shell() {
@@ -211,6 +221,7 @@ function Shell() {
   const [openVehicleId, setOpenVehicleId] = useState<string | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [dashboardAutoCreate, setDashboardAutoCreate] = useState(false);
   const { vehicle, loading: vehicleLoading, error: vehicleError } = useCar(
     openVehicleId ?? undefined
   );
@@ -243,12 +254,22 @@ function Shell() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {tab === "home" && <HomePage onOpenVehicle={setOpenVehicleId} />}
+            {tab === "home" && (
+              <HomePage
+                onOpenVehicle={setOpenVehicleId}
+                onAnunciar={() => {
+                  setDashboardAutoCreate(true);
+                  goTab("dashboard");
+                }}
+              />
+            )}
             {tab === "favorites" && <FavoritesPage onOpenVehicle={setOpenVehicleId} />}
             {tab === "dashboard" && (
               <DashboardGuard
                 onBack={() => goTab("home")}
                 onRequestLogin={() => setLoginOpen(true)}
+                autoCreate={dashboardAutoCreate}
+                onConsumeAutoCreate={() => setDashboardAutoCreate(false)}
               />
             )}
             {tab === "profile" && <ProfilePage onRequestLogin={() => setLoginOpen(true)} />}

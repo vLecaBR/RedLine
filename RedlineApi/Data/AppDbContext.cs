@@ -39,6 +39,8 @@ namespace Redline.Data
                     .OnDelete(DeleteBehavior.Restrict); // conservador: não deleta loja com anúncios
 
                 e.HasIndex(v => v.StoreId);
+                // Índice composto (Fase 5): acelera a vitrine (StoreId + IsActive) e a aba Estoque.
+                e.HasIndex(v => new { v.StoreId, v.IsActive });
                 e.HasIndex(v => v.SellerId);
                 e.HasIndex(v => v.Brand);
                 e.HasIndex(v => v.Stage);

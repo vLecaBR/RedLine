@@ -41,17 +41,17 @@ public sealed class DashboardService(AppDbContext db) : IDashboardService
             .Where(l => l.StoreId == storeId && l.CreatedAt >= previousStart && l.CreatedAt < currentStart)
             .CountAsync(ct);
 
-        // --- 2) Anúncios Ativos (total do inventário da loja; delta = crescimento de criações) ---
+        // --- 2) Anúncios Ativos (só IsActive — L24/Fase 5; delta = crescimento de criações ativas) ---
         var vehiclesTotal = await db.Vehicles.AsNoTracking()
-            .Where(v => v.StoreId == storeId)
+            .Where(v => v.StoreId == storeId && v.IsActive)
             .CountAsync(ct);
 
         var vehiclesCreatedCurrent = await db.Vehicles.AsNoTracking()
-            .Where(v => v.StoreId == storeId && v.CreatedAt >= currentStart && v.CreatedAt < now)
+            .Where(v => v.StoreId == storeId && v.IsActive && v.CreatedAt >= currentStart && v.CreatedAt < now)
             .CountAsync(ct);
 
         var vehiclesCreatedPrevious = await db.Vehicles.AsNoTracking()
-            .Where(v => v.StoreId == storeId && v.CreatedAt >= previousStart && v.CreatedAt < currentStart)
+            .Where(v => v.StoreId == storeId && v.IsActive && v.CreatedAt >= previousStart && v.CreatedAt < currentStart)
             .CountAsync(ct);
 
         // --- 3) Visualizações (soma total; delta = 0.0 no MVP, sem histórico por período) ---

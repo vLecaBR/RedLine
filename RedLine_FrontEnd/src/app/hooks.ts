@@ -4,11 +4,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import type { Vehicle, Lead, PublicSeller, Me, Kpi, DashboardSummary, LeadStatus } from "./types";
+import type {
+  Vehicle,
+  Lead,
+  PublicSeller,
+  Me,
+  Kpi,
+  DashboardSummary,
+  LeadStatus,
+  VehicleFormInput,
+} from "./types";
 import {
   fetcher,
   postJson,
   patchJson,
+  putJson,
+  del,
   buildQuery,
   ApiError,
   type PagedResult,
@@ -333,4 +344,145 @@ export function useKpis() {
     loading: !!key && isLoading,
     error: error as ApiError | undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Estoque do Lojista (Fase 5) — inventário + CRUD (escopado por loja).
+// ---------------------------------------------------------------------------
+
+export type StoreVehicleStatus = "all" | "active" | "inactive";
+
+export interface StoreVehicleFilters {
+  status?: StoreVehicleStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+/** Prefixo das chaves SWR que devem revalidar após uma escrita de veículo. */
+const STORE_VEHICLES_KEY = "/api/store/vehicles";
+const VEHICLES_KEY = "/api/vehicles";
+
+/**
+ * Inventário da loja logada (RF-04/§6.3). `GET /api/store/vehicles` via SWR. A chave só é
+ * ativada quando há sessão E o usuário tem loja (Buyer/deslogado NÃO dispara — §6.7).
+ */
+export function useStoreVehicles(filters: StoreVehicleFilters = {}) {
+  const { me, isLoggedIn } = useMe();
+  const hasStore = isLoggedIn && !!me?.storeId;
+
+  const key = hasStore
+    ? `${STORE_VEHICLES_KEY}${buildQuery({ status: "all", ...filters })}`
+    : null;
+
+  const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(key, fetcher);
+
+  return {
+    vehicles: data?.items ?? [],
+    total: data?.totalItems ?? 0,
+    loading: !!key && isLoading,
+    error: error as ApiError | undefined,
+  };
+}
+
+/** Revalida todas as listagens afetadas por uma escrita: estoque E vitrine pública. */
+function useRevalidateVehicles() {
+  const { mutate } = useSWRConfig();
+  return useCallback(
+    () =>
+      mutate(
+        (key) =>
+          typeof key === "string" &&
+          (key.startsWith(STORE_VEHICLES_KEY) || key.startsWith(VEHICLES_KEY))
+      ),
+    [mutate]
+  );
+}
+
+/**
+ * Criação de veículo (RF-08). `POST /api/vehicles` via `postJson`. Revalida estoque + vitrine.
+ * Trata `ApiError` (400 validação / 403 sem loja).
+ */
+export function useCreateVehicle() {
+  const revalidate = useRevalidateVehicles();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const createVehicle = useCallback(
+    async (input: VehicleFormInput): Promise<Vehicle> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const created = await postJson<Vehicle>("/api/vehicles", input);
+        await revalidate();
+        return created;
+      } catch (e) {
+        if (e instanceof ApiError) setError(e);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [revalidate]
+  );
+
+  return { createVehicle, loading, error };
+}
+
+/**
+ * Edição de veículo (RF-08). `PUT /api/vehicles/{id}` via `putJson`. Revalida estoque + vitrine.
+ * Trata `ApiError` (400 / 403 / 404 de outra loja).
+ */
+export function useUpdateVehicle() {
+  const revalidate = useRevalidateVehicles();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const updateVehicle = useCallback(
+    async (id: string, input: VehicleFormInput): Promise<Vehicle> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const updated = await putJson<Vehicle>(`/api/vehicles/${id}`, input);
+        await revalidate();
+        return updated;
+      } catch (e) {
+        if (e instanceof ApiError) setError(e);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [revalidate]
+  );
+
+  return { updateVehicle, loading, error };
+}
+
+/**
+ * Arquivamento (soft-delete) de veículo (RF-09). `DELETE /api/vehicles/{id}` via `del`.
+ * Revalida estoque + vitrine. Trata `ApiError` (403 / 404 de outra loja).
+ */
+export function useArchiveVehicle() {
+  const revalidate = useRevalidateVehicles();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const archiveVehicle = useCallback(
+    async (id: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        await del(`/api/vehicles/${id}`);
+        await revalidate();
+      } catch (e) {
+        if (e instanceof ApiError) setError(e);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [revalidate]
+  );
+
+  return { archiveVehicle, loading, error };
 }

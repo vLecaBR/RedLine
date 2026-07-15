@@ -12,7 +12,13 @@ const HERO_IMG =
 
 type Sort = "recent" | "priceAsc" | "priceDesc" | "views";
 
-export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
+export function HomePage({
+  onOpenVehicle,
+  onAnunciar,
+}: {
+  onOpenVehicle: (id: string) => void;
+  onAnunciar?: () => void;
+}) {
   const [filter, setFilter] = useState("Todos");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>("recent");
@@ -63,6 +69,7 @@ export function HomePage({ onOpenVehicle }: { onOpenVehicle: (id: string) => voi
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
             whileTap={{ scale: 0.97 }}
+            onClick={onAnunciar}
             style={{ boxShadow: "0 0 0 0 rgba(255,90,0,0.5)", fontWeight: 700 }}
             className="pulse-cta mt-6 flex min-h-[52px] w-fit items-center gap-2 rounded-xl bg-orange-500 px-6 text-white"
           >

@@ -19,3 +19,53 @@ public record CreateLeadRequest(
 /// </summary>
 public record UpdateLeadStatusRequest(
     LeadStatus Status);
+
+/// <summary>
+/// Ficha técnica flexível na entrada (Fase 5 / §4.6). Espelha o <see cref="CustomSpecsResponse"/>;
+/// listas coalescidas para vazias no servidor. Todas as listas são opcionais no corpo.
+/// </summary>
+public record CustomSpecsRequest(
+    List<string>? Engine,
+    List<string>? Suspension,
+    List<string>? Interior,
+    bool HasDyno,
+    int? ClaimedHp);
+
+/// <summary>
+/// Payload de criação de veículo (Fase 5 / RF-01 / §4.1). O cliente NÃO envia
+/// <c>sellerId</c>/<c>storeId</c>/<c>views</c>/<c>isActive</c> — todos derivados no servidor (RNF-02).
+/// <c>Transmission</c>/<c>Stage</c>/<c>Tier</c> desserializam de string honrando [Display(Name)]
+/// via o <c>DisplayNameEnumConverterFactory</c> global (RNF-05).
+/// </summary>
+public record CreateVehicleRequest(
+    string Title,
+    string Brand,
+    string Model,
+    int Year,
+    decimal Price,
+    int Mileage,
+    TransmissionType Transmission,
+    BuildStage Stage,
+    VehicleTier Tier,
+    List<string> Images,
+    string Location,
+    CustomSpecsRequest? CustomSpecs);
+
+/// <summary>
+/// Payload de edição de veículo (Fase 5 / RF-02 / §4.6). Mesma forma do <see cref="CreateVehicleRequest"/>
+/// (MVP: substituição total dos campos mutáveis). Imutáveis (<c>sellerId</c>/<c>storeId</c>/<c>views</c>/
+/// <c>createdAt</c>/<c>isActive</c>) NÃO vêm daqui.
+/// </summary>
+public record UpdateVehicleRequest(
+    string Title,
+    string Brand,
+    string Model,
+    int Year,
+    decimal Price,
+    int Mileage,
+    TransmissionType Transmission,
+    BuildStage Stage,
+    VehicleTier Tier,
+    List<string> Images,
+    string Location,
+    CustomSpecsRequest? CustomSpecs);

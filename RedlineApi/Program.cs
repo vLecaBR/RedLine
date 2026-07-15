@@ -247,6 +247,7 @@ static async Task SeedAsync(WebApplication app)
             Title = "BMW M4 Competition Night", Brand = "BMW", Model = "M4", Year = 2023,
             Price = 720_000m, Mileage = 12_300, Transmission = TransmissionType.DCT,
             Stage = BuildStage.Stage1, Tier = VehicleTier.B, Views = 2_650,
+            IsActive = false, // Fase 5 (§8): 1 veículo arquivado no seed para exercitar a aba Estoque e o filtro da vitrine.
             Images = new() { "https://images.unsplash.com/photo-1610374634235-b51ef357f905?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080" },
             SellerId = diego, StoreId = storeId, Location = "Porto Alegre, RS",
             CreatedAt = new DateTime(2026, 7, 8, 0, 0, 0, DateTimeKind.Utc),

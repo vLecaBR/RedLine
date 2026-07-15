@@ -56,7 +56,30 @@ export interface Vehicle {
   createdAt: string;
   customSpecs: CustomSpecs;
   views: number;
+  isActive?: boolean; // Fase 5 (aditivo/§4.6): vitrine sempre true; aba Estoque usa o valor real.
 }
+
+// Entrada do formulário de anúncio (Fase 5 / §6.4). Campos controlados; `images` são URLs
+// já hospedadas no Storage (o upload roda antes da submissão).
+export interface VehicleFormInput {
+  title: string;
+  brand: string;
+  model: string;
+  year: number;
+  price: number;
+  mileage: number;
+  transmission: Transmission;
+  stage: BuildStage;
+  tier: VehicleTier;
+  images: string[];
+  location: string;
+  customSpecs: CustomSpecs;
+}
+
+// Corpo de POST/PUT /api/vehicles (§4.6). Espelha o VehicleFormInput — o servidor deriva
+// sellerId/storeId/views/isActive.
+export type CreateVehicleRequest = VehicleFormInput;
+export type UpdateVehicleRequest = VehicleFormInput;
 
 // Vendedor público (retorno de GET /api/sellers/{id}). Não expõe email.
 // avatarUrl pode vir null; vehicleCount substitui o antigo useSellerVehicleCount.

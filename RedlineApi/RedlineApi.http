@@ -93,3 +93,84 @@ Authorization: Bearer token.invalido.aqui
 ### Sanity: vitrine continua pública (sem token) — não deve regredir (RNF-08)
 GET {{RedlineApi_HostAddress}}/api/vehicles?page=1&pageSize=6
 Accept: application/json
+
+# -----------------------------------------------------------------------------
+# Fase 5 — Gestão de Estoque (CRUD de veículos + soft-delete)
+# Logue como um StoreStaff (ex.: diego@garagem.dev) e cole o access_token em {{supabaseJwt}}.
+# As URLs de imagem PRECISAM apontar para o bucket vehicle-images do projeto (RNF-04).
+# -----------------------------------------------------------------------------
+@storageBase = https://phwqbzwpcmgyvylitgqy.supabase.co/storage/v1/object/public/vehicle-images
+
+### 201 — criar veículo na loja do token (sellerId/storeId derivados no servidor)
+POST {{RedlineApi_HostAddress}}/api/vehicles
+Content-Type: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+{
+  "title": "Nissan GT-R Street Build (teste)",
+  "brand": "Nissan",
+  "model": "GT-R R35",
+  "year": 2018,
+  "price": 890000,
+  "mileage": 42000,
+  "transmission": "DCT",
+  "stage": "Stage 3",
+  "tier": "B",
+  "images": ["{{storageBase}}/teste/front.jpg"],
+  "location": "Curitiba, PR",
+  "customSpecs": {
+    "engine": ["Turbos híbridos Garrett", "Flex fuel E85"],
+    "suspension": ["KW V3"],
+    "interior": ["Painel digital AEM"],
+    "hasDyno": true,
+    "claimedHp": 1150
+  }
+}
+
+### 400 — validação (price <= 0 e URL de imagem fora do Storage)
+POST {{RedlineApi_HostAddress}}/api/vehicles
+Content-Type: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+{
+  "title": "Inválido", "brand": "X", "model": "Y", "year": 2020,
+  "price": 0, "mileage": 0, "transmission": "Manual", "stage": "Original",
+  "tier": "C", "images": ["https://evil.example.com/x.jpg"], "location": "SP"
+}
+
+### Inventário da loja (inclui arquivados). Copie um "id" para os testes de PUT/DELETE.
+GET {{RedlineApi_HostAddress}}/api/store/vehicles?status=all&page=1&pageSize=20
+Accept: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+### 200 — editar (substituição total dos campos mutáveis). Troque <VEHICLE_ID>.
+PUT {{RedlineApi_HostAddress}}/api/vehicles/<VEHICLE_ID>
+Content-Type: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+{
+  "title": "Nissan GT-R Street Build (editado)",
+  "brand": "Nissan", "model": "GT-R R35", "year": 2018,
+  "price": 910000, "mileage": 43000, "transmission": "DCT",
+  "stage": "Stage 3", "tier": "B",
+  "images": ["{{storageBase}}/teste/front.jpg"],
+  "location": "Curitiba, PR",
+  "customSpecs": { "engine": ["Garrett"], "suspension": [], "interior": [], "hasDyno": true, "claimedHp": 1150 }
+}
+
+### 204 — arquivar (soft-delete). Idempotente: repetir retorna 204.
+DELETE {{RedlineApi_HostAddress}}/api/vehicles/<VEHICLE_ID>
+Authorization: Bearer {{supabaseJwt}}
+
+### 404 — PUT/DELETE em veículo de OUTRA loja (não vaza existência)
+DELETE {{RedlineApi_HostAddress}}/api/vehicles/22222222-2222-2222-2222-222222222222
+Authorization: Bearer {{supabaseJwt}}
+
+### 403 — token sem loja (Buyer JIT) nos endpoints de escrita
+GET {{RedlineApi_HostAddress}}/api/store/vehicles
+Accept: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+### Sanity: veículo arquivado SOME da vitrine pública (RF-07)
+GET {{RedlineApi_HostAddress}}/api/vehicles?q=GT-R
+Accept: application/json

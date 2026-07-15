@@ -27,7 +27,8 @@ public record VehicleResponse(
     string Location,
     DateTime CreatedAt,
     int Views,
-    CustomSpecsResponse CustomSpecs);
+    CustomSpecsResponse CustomSpecs,
+    bool IsActive);
 
 /// <summary>DTO público do vendedor (§2.3). Email NÃO é exposto.</summary>
 public record SellerResponse(

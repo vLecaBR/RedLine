@@ -1,7 +1,7 @@
 // --- PAGES: Dashboard do Lojista (Multi-tenant B2B) ---
 // Fase 4: dados REAIS da loja logada (GET /api/leads, GET /api/dashboard/kpis) e
 // transição de status (PATCH /api/leads/{id}/status). Nada de mock no caminho.
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import {
   Boxes,
@@ -17,15 +17,26 @@ import {
   ChevronDown,
   AlertCircle,
   Loader2,
+  Pencil,
+  Archive,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useKpis, useLeads, useUpdateLeadStatus } from "../hooks";
+import {
+  useKpis,
+  useLeads,
+  useUpdateLeadStatus,
+  useStoreVehicles,
+  useArchiveVehicle,
+  type StoreVehicleStatus,
+} from "../hooks";
 import { useApp } from "../store";
-import type { Lead, LeadStatus } from "../types";
+import type { Lead, LeadStatus, Vehicle } from "../types";
 import { ApiError } from "../lib/api";
 import { Badge } from "../components/Badge";
 import { Skeleton } from "../components/ui/skeleton";
+import { VehicleForm } from "../components/VehicleForm";
+import { formatPrice, formatKm, stageBadgeClass } from "../lib/format";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -62,13 +73,39 @@ const NEXT_STATUSES: Record<LeadStatus, LeadStatus[]> = {
   Perdido: [],
 };
 
-export function DashboardPage({ onBack }: { onBack: () => void }) {
+export function DashboardPage({
+  onBack,
+  autoCreate = false,
+  onConsumeAutoCreate,
+}: {
+  onBack: () => void;
+  autoCreate?: boolean;
+  onConsumeAutoCreate?: () => void;
+}) {
   const { user } = useApp();
   const { cards, loading: kpisLoading, error: kpisError } = useKpis();
   const { leads, loading: leadsLoading, error: leadsError } = useLeads();
   const { updateStatus } = useUpdateLeadStatus();
-  const [nav, setNav] = useState("leads");
+  const [nav, setNav] = useState("estoque");
   const [pendingId, setPendingId] = useState<string | null>(null);
+
+  // Formulário de anúncio (criar/editar).
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Vehicle | null>(null);
+
+  const openCreate = useCallback(() => {
+    setEditing(null);
+    setFormOpen(true);
+  }, []);
+
+  // CTA "Anunciar Meu Projeto" (HomePage) abre o formulário direto ao entrar no painel.
+  useEffect(() => {
+    if (autoCreate) {
+      setNav("estoque");
+      openCreate();
+      onConsumeAutoCreate?.();
+    }
+  }, [autoCreate, openCreate, onConsumeAutoCreate]);
 
   const storeLabel = user?.storeName ?? "Painel";
 
@@ -123,6 +160,7 @@ export function DashboardPage({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <button
+            onClick={openCreate}
             className="flex min-h-[44px] items-center gap-2 rounded-xl bg-orange-500 px-4 text-sm text-white"
             style={{ fontWeight: 700 }}
           >
@@ -179,7 +217,20 @@ export function DashboardPage({ onBack }: { onBack: () => void }) {
           )}
         </div>
 
+        {/* ABA ESTOQUE (Fase 5) */}
+        {nav === "estoque" && (
+          <InventorySection onEdit={(v) => { setEditing(v); setFormOpen(true); }} />
+        )}
+
+        {(nav === "equipe" || nav === "config") && (
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 px-4 py-14 text-center text-sm text-slate-400">
+            Em breve.
+          </div>
+        )}
+
         {/* TABELA DE LEADS COM DISTRIBUIÇÃO */}
+        {nav === "leads" && (
+        <>
         <h2 className="mt-8 text-white">Leads recentes & distribuição</h2>
         <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
           {/* Cabeçalho (desktop) */}
@@ -280,7 +331,144 @@ export function DashboardPage({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </div>
+        </>
+        )}
       </main>
+
+      {/* Formulário de anúncio (criar/editar) */}
+      {formOpen && (
+        <VehicleForm
+          mode={editing ? "edit" : "create"}
+          vehicle={editing}
+          onClose={() => {
+            setFormOpen(false);
+            setEditing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// --- Aba Estoque: inventário real da loja (RF-04/RF-09). ---
+const STOCK_FILTERS: { id: StoreVehicleStatus; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "active", label: "Ativos" },
+  { id: "inactive", label: "Arquivados" },
+];
+
+function InventorySection({ onEdit }: { onEdit: (v: Vehicle) => void }) {
+  const [status, setStatus] = useState<StoreVehicleStatus>("all");
+  const { vehicles, total, loading, error } = useStoreVehicles({ status, pageSize: 50 });
+  const { archiveVehicle } = useArchiveVehicle();
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  async function handleArchive(v: Vehicle) {
+    if (!window.confirm(`Arquivar "${v.title}"? Ele sairá da vitrine (histórico preservado).`)) return;
+    setArchivingId(v.id);
+    try {
+      await archiveVehicle(v.id);
+      toast.success("Anúncio arquivado.");
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Não foi possível arquivar o anúncio.";
+      toast.error(msg);
+    } finally {
+      setArchivingId(null);
+    }
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-white">Estoque {total > 0 && <span className="text-slate-500">({total})</span>}</h2>
+        <div className="flex gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+          {STOCK_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setStatus(f.id)}
+              className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                status === f.id ? "bg-orange-500 text-white" : "text-slate-300 hover:bg-white/5"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-2xl bg-white/10" />
+          ))
+        ) : error ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/5 px-4 py-10 text-sm text-red-300">
+            <AlertCircle className="h-4 w-4" /> Não foi possível carregar o estoque.
+          </div>
+        ) : vehicles.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-14 text-center text-sm text-slate-400">
+            <Boxes className="mx-auto mb-2 h-6 w-6 text-slate-500" />
+            Nenhum veículo aqui. Clique em “Adicionar Veículo” para publicar o primeiro anúncio.
+          </div>
+        ) : (
+          vehicles.map((v) => {
+            const busy = archivingId === v.id;
+            const inactive = v.isActive === false;
+            return (
+              <div
+                key={v.id}
+                className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3"
+              >
+                <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-white/5">
+                  {v.images[0] ? (
+                    <img src={v.images[0]} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-slate-600">
+                      <Car className="h-6 w-6" />
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm text-white">{v.title}</p>
+                    <Badge className={stageBadgeClass(v.stage)}>{v.stage}</Badge>
+                    <Badge
+                      className={
+                        inactive
+                          ? "border-red-400/30 bg-red-400/10 text-red-300"
+                          : "border-green-400/30 bg-green-400/10 text-green-300"
+                      }
+                    >
+                      {inactive ? "Arquivado" : "Ativo"}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {formatPrice(v.price)} · {formatKm(v.mileage)} · Tier {v.tier}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => onEdit(v)}
+                    className="flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:bg-white/10"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Editar
+                  </button>
+                  {!inactive && (
+                    <button
+                      onClick={() => handleArchive(v)}
+                      disabled={busy}
+                      className="flex h-9 items-center gap-1.5 rounded-lg border border-red-400/20 bg-red-400/5 px-3 text-xs text-red-300 hover:bg-red-400/10 disabled:opacity-60"
+                    >
+                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                      Arquivar
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

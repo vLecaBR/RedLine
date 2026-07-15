@@ -108,6 +108,34 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * PUT JSON genérico (Fase 5). Espelha o `postJson`: injeta o Bearer via `authFetch` e
+ * traduz ProblemDetails (RFC 7807) em `ApiError` (400/403/404). Usado na edição de veículo.
+ */
+export async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await authFetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) return toApiError(res);
+
+  return (await res.json()) as T;
+}
+
+/**
+ * DELETE genérico (Fase 5). Trata o `204 No Content` do soft-delete (sem corpo) e traduz
+ * ProblemDetails (RFC 7807) em `ApiError` (403/404) nas falhas.
+ */
+export async function del(path: string): Promise<void> {
+  const res = await authFetch(path, { method: "DELETE" });
+  if (!res.ok) {
+    await toApiError(res);
+  }
+  // 204: nada a retornar.
+}
+
 /** Monta querystring a partir de um objeto, ignorando chaves vazias/undefined/null. */
 export function buildQuery(
   params: Record<string, string | number | boolean | null | undefined>

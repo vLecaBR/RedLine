@@ -123,6 +123,10 @@ namespace Redline.Domain.Entities
         public CustomSpecs? CustomSpecs { get; set; }
 
         public int Views { get; set; }
+
+        // Soft-delete (Fase 5 / §3.1). Arquivar um anúncio = IsActive=false (preserva o histórico
+        // de leads — §4.4). A vitrine pública só lista IsActive=true; a aba Estoque vê todos.
+        public bool IsActive { get; set; } = true;
     }
 
     public class Lead
