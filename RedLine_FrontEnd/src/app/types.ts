@@ -9,8 +9,21 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  avatarUrl: string;
+  avatarUrl: string | null; // D3: pode vir null (Buyer recém-provisionado)
   memberSince: number; // ano
+}
+
+// Retorno de GET /api/me (Fase 3 / §4.1). É o próprio usuário logado — inclui email.
+// storeId/storeName são nullable (um Buyer pode não ter loja).
+export interface Me {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatarUrl: string | null;
+  memberSince: number;
+  storeId: string | null;
+  storeName: string | null;
 }
 
 export type BuildStage = "Original" | "Stage 1" | "Stage 2" | "Stage 3" | "Full Build";

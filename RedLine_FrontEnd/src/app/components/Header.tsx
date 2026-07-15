@@ -1,7 +1,7 @@
 // --- COMPONENTS: Header dinâmico ---
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Search, Menu, Gauge } from "lucide-react";
+import { Search, Menu, Gauge, User as UserIcon } from "lucide-react";
 import { useApp } from "../store";
 
 export function Header({ onMenu }: { onMenu: () => void }) {
@@ -49,11 +49,20 @@ export function Header({ onMenu }: { onMenu: () => void }) {
           />
         </div>
 
-        <img
-          src={user.avatarUrl}
-          alt={user.name}
-          className="h-11 w-11 rounded-full border-2 border-orange-500/60 object-cover"
-        />
+        {user?.avatarUrl ? (
+          <img
+            src={user.avatarUrl}
+            alt={user.name}
+            className="h-11 w-11 rounded-full border-2 border-orange-500/60 object-cover"
+          />
+        ) : (
+          <div
+            aria-label={user ? user.name : "Deslogado"}
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white/15 bg-white/5 text-slate-300"
+          >
+            <UserIcon className="h-5 w-5" />
+          </div>
+        )}
       </div>
     </motion.header>
   );

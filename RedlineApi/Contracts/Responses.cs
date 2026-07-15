@@ -67,3 +67,19 @@ public record LeadResponse(
     string AssignedSellerName,
     LeadStatus Status,
     DateTime CreatedAt);
+
+/// <summary>
+/// DTO do usuário logado (Fase 3 / §4.1). Contrato do <c>GET /api/me</c>.
+/// Por ser o PRÓPRIO usuário, PODE conter <c>Email</c> (RNF-06) — diferente do
+/// <see cref="SellerResponse"/> público. <c>Role</c> serializa como string (RNF-07);
+/// <c>AvatarUrl</c>/<c>StoreId</c>/<c>StoreName</c> são nullable (D3 — Buyer recém-provisionado).
+/// </summary>
+public record MeResponse(
+    Guid Id,
+    string Name,
+    string Email,
+    UserRole Role,
+    string? AvatarUrl,
+    int MemberSince,
+    Guid? StoreId,
+    string? StoreName);

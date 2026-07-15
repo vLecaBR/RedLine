@@ -69,3 +69,27 @@ Content-Type: application/json
 # temporariamente os 3 vendedores para fora da loja (StoreId = NULL) ou troque o Role,
 # então repita o "Caso feliz". Reverta depois.
 ###
+
+# -----------------------------------------------------------------------------
+# Fase 3 — Identidade & Autenticação (GET /api/me)
+# Pegue um access_token real logando no front (ou via Supabase Auth REST) e cole abaixo.
+# -----------------------------------------------------------------------------
+@supabaseJwt = COLE_UM_ACCESS_TOKEN_DO_SUPABASE_AQUI
+
+### 401 — sem token em rota protegida (ProblemDetails)
+GET {{RedlineApi_HostAddress}}/api/me
+Accept: application/json
+
+### 200 — token válido -> MeResponse (com storeId/storeName se for vendedor semeado)
+GET {{RedlineApi_HostAddress}}/api/me
+Accept: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+### 401 — token adulterado/inválido
+GET {{RedlineApi_HostAddress}}/api/me
+Accept: application/json
+Authorization: Bearer token.invalido.aqui
+
+### Sanity: vitrine continua pública (sem token) — não deve regredir (RNF-08)
+GET {{RedlineApi_HostAddress}}/api/vehicles?page=1&pageSize=6
+Accept: application/json

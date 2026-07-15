@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Redline.Data;
 using Redline.Domain.Entities;
 using Redline.Endpoints;
@@ -17,6 +20,70 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Distribuição de leads (round-robin por loja, §3.4 / RNF-06). Scoped: usa o AppDbContext.
 builder.Services.AddScoped<ILeadDistributionService, RoundRobinLeadDistributionService>();
+
+// --- Autenticação (Fase 3): valida o JWT do Supabase via JWKS/OIDC (RF-01/RNF-03). ---
+// Segredos NÃO ficam aqui: Authority/Audience são metadados públicos do projeto Supabase.
+var supabaseAuthority = builder.Configuration["Supabase:Authority"]
+    ?? throw new InvalidOperationException("Config 'Supabase:Authority' ausente (ex.: https://<ref>.supabase.co/auth/v1).");
+var supabaseAudience = builder.Configuration["Supabase:Audience"] ?? "authenticated";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Descobre issuer + chaves de assinatura pela metadata OIDC/JWKS (rotação sem redeploy — RNF-03).
+        options.Authority = supabaseAuthority;
+        options.Audience = supabaseAudience;
+        options.RequireHttpsMetadata = true;
+
+        // Mantém as claims "cruas" do Supabase (sub/email) sem o mapeamento legado do .NET.
+        options.MapInboundClaims = false;
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = supabaseAuthority,
+            ValidateAudience = true,
+            ValidAudience = supabaseAudience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ClockSkew = TimeSpan.FromSeconds(60) // tolerância de relógio (RNF-04)
+        };
+
+        // 401 padronizado como ProblemDetails (RFC 7807), consistente com o front (RNF-01).
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/problem+json";
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    type = "https://tools.ietf.org/html/rfc7235#section-3.1",
+                    title = "Unauthorized",
+                    status = 401,
+                    detail = "Token ausente, expirado ou inválido."
+                });
+            }
+        };
+    });
+
+// --- Autorização (Fase 3): políticas nomeadas por papel derivado do User local (§5.3). ---
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("StoreStaff", p =>
+        p.RequireAuthenticatedUser()
+         .RequireRole(nameof(UserRole.Seller), nameof(UserRole.StoreManager)));
+
+    options.AddPolicy("StoreManagerOnly", p =>
+        p.RequireAuthenticatedUser()
+         .RequireRole(nameof(UserRole.StoreManager)));
+});
+
+// Resolução/provisionamento do usuário local (RF-02/RF-03). Scoped: cacheia por request.
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+// Deriva a claim de papel a partir do User local para alimentar as políticas acima.
+builder.Services.AddScoped<IClaimsTransformation, RoleClaimsTransformation>();
 
 // Serialização JSON do Minimal API:
 //  - enums como STRING (não inteiro)  -> bloqueador #1
@@ -47,11 +114,16 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors(DevCors);
+app.UseCors(DevCors); // AllowAnyHeader já libera o header Authorization (RNF-05)
+
+// Ordem obrigatória: autenticação -> autorização (§5.4).
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/", () => "API da Redline está online e conectada!");
 app.MapVehicleEndpoints();
 app.MapLeadEndpoints();
+app.MapMeEndpoints();
 
 app.Run();
 

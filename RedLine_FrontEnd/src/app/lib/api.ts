@@ -1,5 +1,8 @@
 // --- CAMADA DE API ---
 // Cliente HTTP central. Base configurável via env; trata o formato de erro ProblemDetails (RFC 7807).
+// Fase 3: TODA saída HTTP passa por `authFetch`, que injeta o Bearer da sessão do Supabase (RF-08).
+
+import { supabase, getAccessToken } from "./supabase";
 
 export const API_BASE: string =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
@@ -31,22 +34,43 @@ export class ApiError extends Error {
   }
 }
 
-/** Fetcher genérico para o SWR. Lança ApiError com o detail do ProblemDetails em caso de falha. */
-export async function fetcher<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { Accept: "application/json" },
-  });
+/**
+ * Wrapper HTTP central (RF-08 / §2.4/L10). Injeta `Authorization: Bearer <access_token>`
+ * quando há sessão do Supabase; endpoints públicos seguem funcionando sem token (a header
+ * simplesmente não é enviada). Em `401`, limpa a sessão e sinaliza deslogado (RNF-01).
+ */
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
 
-  if (!res.ok) {
-    let problem: ProblemDetails | undefined;
-    try {
-      problem = (await res.json()) as ProblemDetails;
-    } catch {
-      /* corpo não-JSON: mantém undefined */
-    }
-    throw new ApiError(problem?.detail ?? `Erro ${res.status}`, res.status, problem);
+  const token = await getAccessToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  // Token expirado/inválido em rota protegida -> encerra a sessão local (RNF-01).
+  if (res.status === 401 && token) {
+    await supabase.auth.signOut();
   }
 
+  return res;
+}
+
+/** Extrai o ProblemDetails (RFC 7807) do corpo e lança um `ApiError` consistente. */
+async function toApiError(res: Response): Promise<never> {
+  let problem: ProblemDetails | undefined;
+  try {
+    problem = (await res.json()) as ProblemDetails;
+  } catch {
+    /* corpo não-JSON: mantém undefined */
+  }
+  throw new ApiError(problem?.detail ?? `Erro ${res.status}`, res.status, problem);
+}
+
+/** Fetcher genérico para o SWR. Lança ApiError com o detail do ProblemDetails em caso de falha. */
+export async function fetcher<T>(path: string): Promise<T> {
+  const res = await authFetch(path);
+  if (!res.ok) return toApiError(res);
   return (await res.json()) as T;
 }
 
@@ -55,24 +79,13 @@ export async function fetcher<T>(path: string): Promise<T> {
  * lançando `ApiError` com o `detail` e o `status` para o chamador tratar (400/404/409).
  */
 export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await authFetch(path, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) {
-    let problem: ProblemDetails | undefined;
-    try {
-      problem = (await res.json()) as ProblemDetails;
-    } catch {
-      /* corpo não-JSON: mantém undefined */
-    }
-    throw new ApiError(problem?.detail ?? `Erro ${res.status}`, res.status, problem);
-  }
+  if (!res.ok) return toApiError(res);
 
   // 201/200 com corpo JSON. (Não esperamos 204 aqui.)
   return (await res.json()) as T;

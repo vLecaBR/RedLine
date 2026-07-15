@@ -2,10 +2,11 @@
 // Vitrine/detalhe/vendedor: dados REAIS da RedlineApi via SWR.
 // Leads/KPIs/roleta: ainda mockados (fases futuras).
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
-import type { Vehicle, Lead, PublicSeller } from "./types";
+import type { Vehicle, Lead, PublicSeller, Me } from "./types";
 import { fetcher, postJson, buildQuery, ApiError, type PagedResult } from "./lib/api";
+import { supabase } from "./lib/supabase";
 import { LEADS, KPIS } from "./data/mocks";
 
 export interface CarFilters {
@@ -92,6 +93,69 @@ export function useSeller(id?: string) {
     fetcher
   );
   return { seller: data, loading: isLoading, error };
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Fase 3) — sessão do Supabase + GET /api/me.
+// ---------------------------------------------------------------------------
+
+/**
+ * Estado da sessão do Supabase. `true`/`false` após o primeiro carregamento;
+ * enquanto resolve, `hasSession` é `null` (evita "flash" de deslogado no reload).
+ */
+export function useSession() {
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (alive) setHasSession(!!data.session);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session);
+    });
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  return hasSession;
+}
+
+/**
+ * Usuário logado via `GET /api/me` (RF-09). A chave SWR só é ativada quando há sessão,
+ * então deslogado não dispara request. Revalida automaticamente ao (des)logar.
+ */
+export function useMe() {
+  const hasSession = useSession();
+  const { data, error, isLoading, mutate } = useSWR<Me>(
+    hasSession ? "/api/me" : null,
+    fetcher
+  );
+
+  return {
+    me: data ?? null,
+    loading: hasSession === null || (!!hasSession && isLoading),
+    error: error as ApiError | undefined,
+    isLoggedIn: !!hasSession && !!data,
+    hasSession: !!hasSession,
+    mutate,
+  };
+}
+
+/** Login por e-mail+senha e logout (RF-07). */
+export function useAuthActions() {
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, []);
+
+  return { signIn, signOut };
 }
 
 // ---------------------------------------------------------------------------
