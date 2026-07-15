@@ -21,6 +21,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Distribuição de leads (round-robin por loja, §3.4 / RNF-06). Scoped: usa o AppDbContext.
 builder.Services.AddScoped<ILeadDistributionService, RoundRobinLeadDistributionService>();
 
+// Agregação de KPIs do Dashboard (Fase 4 / RNF-09). Scoped: usa o AppDbContext.
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+
 // --- Autenticação (Fase 3): valida o JWT do Supabase via JWKS/OIDC (RF-01/RNF-03). ---
 // Segredos NÃO ficam aqui: Authority/Audience são metadados públicos do projeto Supabase.
 var supabaseAuthority = builder.Configuration["Supabase:Authority"]
@@ -124,6 +127,7 @@ app.MapGet("/", () => "API da Redline está online e conectada!");
 app.MapVehicleEndpoints();
 app.MapLeadEndpoints();
 app.MapMeEndpoints();
+app.MapDashboardEndpoints();
 
 app.Run();
 
@@ -254,4 +258,46 @@ static async Task SeedAsync(WebApplication app)
         });
 
     await db.SaveChangesAsync();
+
+    // Leads de exemplo na "Garagem Redline" (RF/§8) para popular o Dashboard da Fase 4.
+    // Idempotente (roda no mesmo bloco guardado por Vehicles.Any()). CreatedAt na janela de 30d
+    // (relativo a UtcNow) para alimentar os KPIs. Sem isso o painel abre vazio até o 1º POST /leads.
+    if (!await db.Leads.AnyAsync())
+    {
+        var seeded = await db.Vehicles.AsNoTracking()
+            .Where(v => v.StoreId == storeId)
+            .Select(v => new { v.Id, v.Title, v.Tier })
+            .ToListAsync();
+
+        var byTitle = seeded.ToDictionary(v => v.Title, v => v);
+        var now = DateTime.UtcNow;
+
+        (string title, Guid seller, string customer, string message, LeadStatus status, int daysAgo)[] rows =
+        {
+            ("Honda Civic Type R Turbo", joao,   "Marcos Vinícius", "Aceita troca por hatch? Tem laudo do dyno?", LeadStatus.EmAtendimento, 5),
+            ("Nissan GT-R Street Build", bianca, "Amanda Prado",    "Qual a procedência do motor? Documentação em dia?", LeadStatus.Novo, 5),
+            ("McLaren P1 Track Edition", diego,  "Eduardo Salles",  "Interesse real. Posso agendar test drive?", LeadStatus.Convertido, 6),
+            ("BMW M4 Competition Night", joao,   "Letícia Fontes",  "Financiamento em até 48x?", LeadStatus.Novo, 6),
+        };
+
+        foreach (var r in rows)
+        {
+            if (!byTitle.TryGetValue(r.title, out var v)) continue;
+            var created = now.AddDays(-r.daysAgo);
+            db.Leads.Add(new Lead
+            {
+                VehicleId = v.Id,
+                Tier = v.Tier,
+                StoreId = storeId,
+                CustomerName = r.customer,
+                Message = r.message,
+                AssignedSellerId = r.seller,
+                Status = r.status,
+                CreatedAt = created,
+                UpdatedAt = created
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
 }

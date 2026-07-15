@@ -1,3 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Redline.Contracts;
 using Redline.Data;
@@ -15,10 +19,14 @@ public static class LeadEndpoints
         // Público (comprador anônimo — RF-05). Sem autenticação nesta fase.
         group.MapPost("/leads", CreateLead);
 
+        // Protegidos (Fase 4 / RF-04): StoreStaff + escopo por StoreId do token.
+        group.MapGet("/leads", GetLeads).RequireAuthorization("StoreStaff");
+        group.MapPatch("/leads/{id:guid}/status", UpdateLeadStatus).RequireAuthorization("StoreStaff");
+
         return app;
     }
 
-    // POST /api/leads  (RF-01..RF-04)
+    // POST /api/leads  (Fase 2 — RF-01..RF-04)
     private static async Task<IResult> CreateLead(
         CreateLeadRequest request,
         AppDbContext db,
@@ -79,28 +87,170 @@ public static class LeadEndpoints
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
 
-        // --- Nome do vendedor para a resposta denormalizada (RF-04). Sem vazar e-mail (RNF-10). ---
-        var assignedSellerName = await db.Users.AsNoTracking()
-            .Where(u => u.Id == assignedSellerId)
-            .Select(u => u.Name)
-            .FirstOrDefaultAsync(ct) ?? string.Empty;
-
-        var response = new LeadResponse(
-            lead.Id,
-            lead.VehicleId,
-            vehicle.Title,
-            lead.Tier,
-            lead.StoreId,
-            lead.CustomerName,
-            lead.Message,
-            lead.AssignedSellerId,
-            assignedSellerName,
-            lead.Status,
-            lead.CreatedAt);
-
+        var response = await ProjectByIdAsync(db, lead.Id, ct);
         return Results.Created($"/api/leads/{lead.Id}", response);
     }
 
+    // GET /api/leads  (Fase 4 — RF-01 / §4.1)
+    private static async Task<IResult> GetLeads(
+        ClaimsPrincipal principal,
+        ICurrentUserService currentUser,
+        AppDbContext db,
+        string? status = null,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        // Escopo por loja: StoreId vem SEMPRE do token (RNF-03). Sem loja -> 403.
+        var storeId = await ResolveStoreIdAsync(principal, currentUser, ct);
+        if (storeId is null)
+            return Forbidden();
+
+        // Filtro opcional de status (parse tolerante ao [Display(Name)] — RNF-05).
+        LeadStatus? statusEnum = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!TryParseDisplayEnum<LeadStatus>(status, out var s))
+                return Problem(StatusCodes.Status400BadRequest, "Bad Request",
+                    $"Valor '{status}' inválido para o parâmetro 'status'.");
+            statusEnum = s;
+        }
+
+        page = page < 1 ? 1 : page;
+        pageSize = Math.Clamp(pageSize, 1, 100); // teto 100 (§4.1)
+
+        var query = db.Leads.AsNoTracking().Where(l => l.StoreId == storeId.Value);
+        if (statusEnum.HasValue) query = query.Where(l => l.Status == statusEnum.Value);
+
+        var totalItems = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderByDescending(l => l.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(LeadProjection)
+            .ToListAsync(ct);
+
+        var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize);
+        return Results.Ok(new PagedResult<LeadResponse>(items, page, pageSize, totalItems, totalPages));
+    }
+
+    // PATCH /api/leads/{id}/status  (Fase 4 — RF-02 / §4.2 / §4.3)
+    private static async Task<IResult> UpdateLeadStatus(
+        Guid id,
+        UpdateLeadStatusRequest request,
+        ClaimsPrincipal principal,
+        ICurrentUserService currentUser,
+        AppDbContext db,
+        CancellationToken ct)
+    {
+        var storeId = await ResolveStoreIdAsync(principal, currentUser, ct);
+        if (storeId is null)
+            return Forbidden();
+
+        if (request is null)
+            return Problem(StatusCodes.Status400BadRequest, "Bad Request", "Corpo da requisição ausente.");
+
+        // Carrega COM tracking, filtrando por Id E StoreId. Lead de outra loja (ou inexistente)
+        // cai no mesmo 404 — não vaza existência (§4.2).
+        var lead = await db.Leads
+            .FirstOrDefaultAsync(l => l.Id == id && l.StoreId == storeId.Value, ct);
+
+        if (lead is null)
+            return Problem(StatusCodes.Status404NotFound, "Not Found",
+                $"Lead com id '{id}' não encontrado.");
+
+        var target = request.Status;
+
+        // Mesmo estado: no-op idempotente -> 200 sem alterar (§4.3).
+        if (lead.Status != target)
+        {
+            if (!IsValidTransition(lead.Status, target))
+                return Problem(StatusCodes.Status400BadRequest, "Bad Request",
+                    $"Transição de status inválida: '{Display(lead.Status)}' -> '{Display(target)}'.");
+
+            lead.Status = target;
+            lead.UpdatedAt = DateTime.UtcNow; // RNF-08 (UTC)
+            await db.SaveChangesAsync(ct);
+        }
+
+        var response = await ProjectByIdAsync(db, lead.Id, ct);
+        return Results.Ok(response);
+    }
+
+    // --- Máquina de estados (§4.3) ---
+    // Novo -> {Em atendimento, Convertido, Perdido}
+    // Em atendimento -> {Convertido, Perdido}
+    // Convertido/Perdido -> terminal (nada)
+    private static bool IsValidTransition(LeadStatus from, LeadStatus to) => from switch
+    {
+        LeadStatus.Novo => to is LeadStatus.EmAtendimento or LeadStatus.Convertido or LeadStatus.Perdido,
+        LeadStatus.EmAtendimento => to is LeadStatus.Convertido or LeadStatus.Perdido,
+        _ => false // Convertido / Perdido são terminais
+    };
+
+    // --- Helpers ---
+
+    // Projeção compartilhada Lead -> LeadResponse (RF-09): reusada por POST/GET/PATCH para
+    // evitar divergência de contrato. Denormaliza Vehicle.Title e AssignedSeller.Name; sem e-mail (RNF-04).
+    private static readonly Expression<Func<Lead, LeadResponse>> LeadProjection = l => new LeadResponse(
+        l.Id,
+        l.VehicleId,
+        l.Vehicle != null ? l.Vehicle.Title : string.Empty,
+        l.Tier,
+        l.StoreId,
+        l.CustomerName,
+        l.Message,
+        l.AssignedSellerId,
+        l.AssignedSeller != null ? l.AssignedSeller.Name : string.Empty,
+        l.Status,
+        l.CreatedAt);
+
+    private static Task<LeadResponse> ProjectByIdAsync(AppDbContext db, Guid id, CancellationToken ct) =>
+        db.Leads.AsNoTracking()
+            .Where(l => l.Id == id)
+            .Select(LeadProjection)
+            .FirstAsync(ct);
+
+    // Resolve o StoreId do usuário logado via ICurrentUserService (RNF-03). null = autenticado sem loja.
+    private static async Task<Guid?> ResolveStoreIdAsync(
+        ClaimsPrincipal principal, ICurrentUserService currentUser, CancellationToken ct)
+    {
+        var me = await currentUser.GetAsync(principal, ct);
+        return me?.StoreId;
+    }
+
+    private static IResult Forbidden() =>
+        Problem(StatusCodes.Status403Forbidden, "Forbidden",
+            "Usuário autenticado não está vinculado a uma loja.");
+
     private static IResult Problem(int statusCode, string title, string detail) =>
         Results.Problem(statusCode: statusCode, title: title, detail: detail);
+
+    // Converte string -> enum honrando [Display(Name)] (RNF-05). Ex.: "Em atendimento" -> EmAtendimento.
+    private static bool TryParseDisplayEnum<T>(string raw, out T value) where T : struct, Enum
+    {
+        foreach (var v in Enum.GetValues<T>())
+        {
+            var member = v.ToString();
+            var display = typeof(T).GetMember(member).FirstOrDefault()
+                ?.GetCustomAttribute<DisplayAttribute>()?.Name ?? member;
+
+            if (string.Equals(raw, member, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(raw, display, StringComparison.OrdinalIgnoreCase))
+            {
+                value = v;
+                return true;
+            }
+        }
+        value = default;
+        return false;
+    }
+
+    private static string Display(LeadStatus s)
+    {
+        var member = s.ToString();
+        return typeof(LeadStatus).GetMember(member).FirstOrDefault()
+            ?.GetCustomAttribute<DisplayAttribute>()?.Name ?? member;
+    }
 }

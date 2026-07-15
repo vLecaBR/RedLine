@@ -76,6 +76,7 @@ export interface Lead {
   vehicleId: string;
   vehicleTitle: string;
   tier: VehicleTier;
+  storeId?: string; // §2.4/L8 — presente no contrato do Dashboard (GET/PATCH /api/leads)
   customerName: string;
   message: string;
   assignedSellerId: string;
@@ -84,9 +85,18 @@ export interface Lead {
   createdAt: string;
 }
 
-export interface KpiCard {
+// Card de KPI (retorno de GET /api/dashboard/kpis). `value` já vem formatado do backend.
+export interface Kpi {
   label: string;
   value: string;
-  delta: number; // variação percentual
+  delta: number; // variação (percentual ou pontos percentuais, conforme o card)
   icon: string;
+}
+
+// Alias retrocompatível com o mock KpiCard.
+export type KpiCard = Kpi;
+
+// Envelope de GET /api/dashboard/kpis (§4.4).
+export interface DashboardSummary {
+  cards: Kpi[];
 }

@@ -3,11 +3,17 @@
 // Leads/KPIs/roleta: ainda mockados (fases futuras).
 
 import { useCallback, useEffect, useState } from "react";
-import useSWR from "swr";
-import type { Vehicle, Lead, PublicSeller, Me } from "./types";
-import { fetcher, postJson, buildQuery, ApiError, type PagedResult } from "./lib/api";
+import useSWR, { useSWRConfig } from "swr";
+import type { Vehicle, Lead, PublicSeller, Me, Kpi, DashboardSummary, LeadStatus } from "./types";
+import {
+  fetcher,
+  postJson,
+  patchJson,
+  buildQuery,
+  ApiError,
+  type PagedResult,
+} from "./lib/api";
 import { supabase } from "./lib/supabase";
-import { LEADS, KPIS } from "./data/mocks";
 
 export interface CarFilters {
   q?: string;
@@ -242,13 +248,89 @@ export function useLeadDistribution() {
 }
 
 // ---------------------------------------------------------------------------
-// Mocks mantidos — fases futuras (Dashboard: Leads/KPIs).
+// Dashboard do Lojista (Fase 4) — Leads & KPIs REAIS, escopados por loja.
 // ---------------------------------------------------------------------------
 
-export function useLeads(): Lead[] {
-  return LEADS;
+export interface LeadFilters {
+  status?: LeadStatus;
+  page?: number;
+  pageSize?: number;
 }
 
+/** Chave SWR base da listagem de leads (usada para revalidar após a mutação de status). */
+const LEADS_KEY_PREFIX = "/api/leads";
+
+/**
+ * Leads da loja logada (RF-06). `GET /api/leads` via SWR. A chave só é ativada quando há
+ * sessão E o usuário tem loja (Buyer/deslogado NÃO dispara a chamada protegida — §6/8).
+ * Retorna `{ leads, total, loading, error }`.
+ */
+export function useLeads(filters: LeadFilters = {}) {
+  const { me, isLoggedIn } = useMe();
+  const hasStore = isLoggedIn && !!me?.storeId;
+
+  const key = hasStore
+    ? `${LEADS_KEY_PREFIX}${buildQuery({ ...filters })}`
+    : null;
+
+  const { data, isLoading, error } = useSWR<PagedResult<Lead>>(key, fetcher);
+
+  return {
+    leads: data?.items ?? [],
+    total: data?.totalItems ?? 0,
+    loading: !!key && isLoading,
+    error: error as ApiError | undefined,
+  };
+}
+
+/**
+ * Mutação de transição de status do lead (RF-07). `PATCH /api/leads/{id}/status` via `patchJson`.
+ * Ao concluir, revalida TODAS as chaves de `/api/leads` (independe dos filtros ativos) via SWR.
+ * Trata `ApiError` (400 transição inválida / 404 lead de outra loja).
+ */
+export function useUpdateLeadStatus() {
+  const { mutate } = useSWRConfig();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const updateStatus = useCallback(
+    async (id: string, status: LeadStatus): Promise<Lead> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const updated = await patchJson<Lead>(`/api/leads/${id}/status`, { status });
+        // Revalida qualquer chave de listagem de leads (com/sem filtros).
+        await mutate(
+          (key) => typeof key === "string" && key.startsWith(LEADS_KEY_PREFIX)
+        );
+        return updated;
+      } catch (e) {
+        if (e instanceof ApiError) setError(e);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mutate]
+  );
+
+  return { updateStatus, loading, error };
+}
+
+/**
+ * KPIs agregados da loja logada (RF-08). `GET /api/dashboard/kpis` via SWR. Chave só ativa
+ * quando logado com loja. Retorna `{ cards, loading, error }` (lê `.cards`).
+ */
 export function useKpis() {
-  return KPIS;
+  const { me, isLoggedIn } = useMe();
+  const hasStore = isLoggedIn && !!me?.storeId;
+
+  const key = hasStore ? "/api/dashboard/kpis" : null;
+  const { data, isLoading, error } = useSWR<DashboardSummary>(key, fetcher);
+
+  return {
+    cards: (data?.cards ?? []) as Kpi[],
+    loading: !!key && isLoading,
+    error: error as ApiError | undefined,
+  };
 }

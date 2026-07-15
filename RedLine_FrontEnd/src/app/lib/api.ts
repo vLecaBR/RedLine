@@ -91,6 +91,23 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * PATCH JSON genérico (Fase 4). Espelha o `postJson`: injeta o Bearer via `authFetch`,
+ * traduz ProblemDetails (RFC 7807) em `ApiError` com `detail`/`status` (400/403/404).
+ * Usado pela transição de status do lead.
+ */
+export async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await authFetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) return toApiError(res);
+
+  return (await res.json()) as T;
+}
+
 /** Monta querystring a partir de um objeto, ignorando chaves vazias/undefined/null. */
 export function buildQuery(
   params: Record<string, string | number | boolean | null | undefined>

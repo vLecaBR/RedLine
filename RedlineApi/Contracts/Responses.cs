@@ -83,3 +83,19 @@ public record MeResponse(
     int MemberSince,
     Guid? StoreId,
     string? StoreName);
+
+/// <summary>
+/// Card de KPI do Dashboard (Fase 4 / §4.4). <c>Value</c> é uma string JÁ formatada pelo
+/// backend (milhares como <c>24.3k</c>, percentuais com <c>%</c>) para o front renderizar direto.
+/// <c>Delta</c> é a variação (percentual ou pontos percentuais, conforme o card). <c>Icon</c>
+/// usa as mesmas chaves que o front já mapeia (<c>inbox</c>/<c>car</c>/<c>eye</c>/<c>trending-up</c>).
+/// </summary>
+public record DashboardKpiCard(
+    string Label,
+    string Value,
+    double Delta,
+    string Icon);
+
+/// <summary>Envelope do <c>GET /api/dashboard/kpis</c> (§4.4). Só agregados — nunca linhas brutas (RNF-04).</summary>
+public record DashboardSummaryResponse(
+    IReadOnlyList<DashboardKpiCard> Cards);

@@ -2,7 +2,7 @@
 // Fonte de dados centralizada. Nenhum dado hardcoded deve viver dentro do JSX.
 // Substituir por chamadas reais à API .NET futuramente.
 
-import type { User, Vehicle, Lead, KpiCard } from "../types";
+import type { User, Vehicle } from "../types";
 
 export const CURRENT_USER: User = {
   id: "u-001",
@@ -210,60 +210,5 @@ export const VEHICLES: Vehicle[] = [
   },
 ];
 
-export const LEADS: Lead[] = [
-  {
-    id: "l-01",
-    vehicleId: "v-05",
-    vehicleTitle: "Civic Type R Turbo",
-    tier: "C",
-    customerName: "Marcos Vinícius",
-    message: "Aceita troca por hatch? Tem laudo do dyno?",
-    assignedSellerId: "s-01",
-    assignedSellerName: "João Mendes",
-    status: "Em atendimento",
-    createdAt: "2026-07-10 09:12",
-  },
-  {
-    id: "l-02",
-    vehicleId: "v-03",
-    vehicleTitle: "Nissan GT-R Street Build",
-    tier: "B",
-    customerName: "Amanda Prado",
-    message: "Qual a procedência do motor? Documentação em dia?",
-    assignedSellerId: "s-02",
-    assignedSellerName: "Bianca Rocha",
-    status: "Novo",
-    createdAt: "2026-07-10 08:40",
-  },
-  {
-    id: "l-03",
-    vehicleId: "v-01",
-    vehicleTitle: "McLaren P1 Track Edition",
-    tier: "A",
-    customerName: "Eduardo Salles",
-    message: "Interesse real. Posso agendar test drive?",
-    assignedSellerId: "s-03",
-    assignedSellerName: "Diego Nakamura",
-    status: "Convertido",
-    createdAt: "2026-07-09 17:22",
-  },
-  {
-    id: "l-04",
-    vehicleId: "v-06",
-    vehicleTitle: "BMW M4 Competition Night",
-    tier: "B",
-    customerName: "Letícia Fontes",
-    message: "Financiamento em até 48x?",
-    assignedSellerId: "s-01",
-    assignedSellerName: "João Mendes",
-    status: "Novo",
-    createdAt: "2026-07-09 14:05",
-  },
-];
-
-export const KPIS: KpiCard[] = [
-  { label: "Leads Recebidos", value: "128", delta: 12.4, icon: "inbox" },
-  { label: "Anúncios Ativos", value: "42", delta: 3.1, icon: "car" },
-  { label: "Visualizações", value: "24.3k", delta: 18.7, icon: "eye" },
-  { label: "Taxa de Conversão", value: "6.8%", delta: -1.2, icon: "trending-up" },
-];
+// LEADS/KPIS mock removidos na Fase 4 — o Dashboard consome dados reais
+// (GET /api/leads e GET /api/dashboard/kpis) via os hooks useLeads/useKpis.
