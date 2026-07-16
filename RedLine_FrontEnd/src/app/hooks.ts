@@ -130,6 +130,24 @@ export function useFavorites() {
   };
 }
 
+/**
+ * "Meus Anúncios" (Fase 6 / RF-04): veículos do próprio usuário (`GET /api/me/vehicles`).
+ * Chave só ativa quando logado. Retorna `{ vehicles, total, loading, error }`.
+ */
+export function useMyVehicles(filters: StoreVehicleFilters = {}) {
+  const { isLoggedIn } = useMe();
+  const key = isLoggedIn
+    ? `/api/me/vehicles${buildQuery({ status: "all", ...filters })}`
+    : null;
+  const { data, isLoading, error } = useSWR<PagedResult<Vehicle>>(key, fetcher);
+  return {
+    vehicles: data?.items ?? [],
+    total: data?.totalItems ?? 0,
+    loading: !!key && isLoading,
+    error: error as ApiError | undefined,
+  };
+}
+
 /** Resolve favoritos via API a partir de uma lista de ids (fallback deslogado — RF-09). */
 export function useVehiclesByIds(ids: string[]) {
   const key = ids.length ? `/api/vehicles${buildQuery({ pageSize: 50 })}` : null;

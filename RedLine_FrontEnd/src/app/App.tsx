@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Heart, User as UserIcon, Store, LogOut, LogIn, Settings, Lock } from "lucide-react";
+import { Heart, User as UserIcon, Store, LogOut, LogIn, Settings, Lock, Car } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { AppProvider, useApp } from "./store";
 import { Header } from "./components/Header";
@@ -11,7 +11,7 @@ import { LoginSheet } from "./components/LoginSheet";
 import { HomePage } from "./pages/HomePage";
 import { VehicleDetailPage } from "./pages/VehicleDetailPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { useCar, useVehiclesByIds } from "./hooks";
+import { useCar, useVehiclesByIds, useMyVehicles } from "./hooks";
 
 // --- PAGES: Favoritos (RF-09: resolvido via API, sem leitura de mocks) ---
 function FavoritesPage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void }) {
@@ -53,6 +53,7 @@ function FavoritesPage({ onOpenVehicle }: { onOpenVehicle: (id: string) => void 
 // --- PAGES: Perfil ---
 function ProfilePage({ onRequestLogin }: { onRequestLogin: () => void }) {
   const { user, favorites, loadingUser, signOut } = useApp();
+  const { total: myVehiclesTotal } = useMyVehicles();
 
   if (loadingUser) {
     return (
@@ -90,6 +91,7 @@ function ProfilePage({ onRequestLogin }: { onRequestLogin: () => void }) {
 
   const rows = [
     { icon: Store, label: "Loja", value: user.storeName ?? "—" },
+    { icon: Car, label: "Meus Anúncios", value: `${myVehiclesTotal} anúncio(s)` },
     { icon: Heart, label: "Favoritos", value: `${favorites.length} salvos` },
     { icon: Settings, label: "Configurações", value: "" },
   ];

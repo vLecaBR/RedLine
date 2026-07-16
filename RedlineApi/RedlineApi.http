@@ -174,3 +174,35 @@ Authorization: Bearer {{supabaseJwt}}
 ### Sanity: veículo arquivado SOME da vitrine pública (RF-07)
 GET {{RedlineApi_HostAddress}}/api/vehicles?q=GT-R
 Accept: application/json
+
+# -----------------------------------------------------------------------------
+# Fase 6 — Favoritos & Perfil persistidos
+# Logue (qualquer papel) e cole o access_token em {{supabaseJwt}}.
+# Troque <VEHICLE_ID> por um id ativo da vitrine.
+# -----------------------------------------------------------------------------
+
+### 204 — favoritar (idempotente: repetir também retorna 204)
+POST {{RedlineApi_HostAddress}}/api/me/favorites/<VEHICLE_ID>
+Authorization: Bearer {{supabaseJwt}}
+
+### 200 — meus favoritos (só veículos ativos, recentes primeiro)
+GET {{RedlineApi_HostAddress}}/api/me/favorites
+Accept: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+### 404 — favoritar veículo inexistente/arquivado
+POST {{RedlineApi_HostAddress}}/api/me/favorites/11111111-1111-1111-1111-111111111111
+Authorization: Bearer {{supabaseJwt}}
+
+### 204 — desfavoritar (idempotente)
+DELETE {{RedlineApi_HostAddress}}/api/me/favorites/<VEHICLE_ID>
+Authorization: Bearer {{supabaseJwt}}
+
+### 200 — Meus Anúncios (SellerId == token). Buyer JIT retorna lista vazia.
+GET {{RedlineApi_HostAddress}}/api/me/vehicles?status=all&page=1&pageSize=20
+Accept: application/json
+Authorization: Bearer {{supabaseJwt}}
+
+### 401 — sem token nas rotas "me"
+GET {{RedlineApi_HostAddress}}/api/me/favorites
+Accept: application/json
