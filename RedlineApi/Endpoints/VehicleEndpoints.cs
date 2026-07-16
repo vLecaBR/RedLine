@@ -260,6 +260,7 @@ public static class VehicleEndpoints
         ICurrentUserService currentUser,
         IConfiguration config,
         AppDbContext db,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var me = await currentUser.GetAsync(principal, ct);
@@ -295,6 +296,10 @@ public static class VehicleEndpoints
         db.Vehicles.Add(vehicle);
         await db.SaveChangesAsync(ct);
 
+        loggerFactory.CreateLogger("Redline.Audit").LogInformation(
+            "Veículo criado {VehicleId} loja {StoreId} vendedor {SellerId}",
+            vehicle.Id, vehicle.StoreId, vehicle.SellerId);
+
         return Results.Created($"/api/vehicles/{vehicle.Id}", ToResponse(vehicle));
     }
 
@@ -306,6 +311,7 @@ public static class VehicleEndpoints
         ICurrentUserService currentUser,
         IConfiguration config,
         AppDbContext db,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var me = await currentUser.GetAsync(principal, ct);
@@ -341,6 +347,9 @@ public static class VehicleEndpoints
 
         await db.SaveChangesAsync(ct);
 
+        loggerFactory.CreateLogger("Redline.Audit").LogInformation(
+            "Veículo editado {VehicleId} loja {StoreId}", vehicle.Id, vehicle.StoreId);
+
         return Results.Ok(ToResponse(vehicle));
     }
 
@@ -350,6 +359,7 @@ public static class VehicleEndpoints
         ClaimsPrincipal principal,
         ICurrentUserService currentUser,
         AppDbContext db,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var me = await currentUser.GetAsync(principal, ct);
@@ -368,6 +378,9 @@ public static class VehicleEndpoints
             vehicle.IsActive = false;
             vehicle.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
+
+            loggerFactory.CreateLogger("Redline.Audit").LogInformation(
+                "Veículo arquivado {VehicleId} loja {StoreId}", vehicle.Id, vehicle.StoreId);
         }
 
         return Results.NoContent();

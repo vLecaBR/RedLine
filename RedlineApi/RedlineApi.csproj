@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Fase 7 / RF-06: segredos (connection string) via user-secrets em dev. Ver RUNBOOK_PRODUCAO.md §2. -->
+    <UserSecretsId>redline-api-phwqbzwpcmgyvylitgqy</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,10 +1,18 @@
+using System.Diagnostics;
+using System.Text.Json;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Redline.Data;
 using Redline.Domain.Entities;
 using Redline.Endpoints;
+using Redline.Observability;
 using Redline.Serialization;
 using Redline.Services;
 
@@ -14,9 +22,100 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// EF Core / PostgreSQL (Supabase)
+// Handler global de erros em ProblemDetails (Fase 7 / RF-01). Enriquecemos com traceId e, em
+// Production, trocamos o detalhe por uma mensagem genérica — nunca vaza stack trace (RNF-02).
+var isDevelopment = builder.Environment.IsDevelopment();
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = ctx =>
+    {
+        ctx.ProblemDetails.Instance ??= ctx.HttpContext.Request.Path;
+        ctx.ProblemDetails.Extensions["traceId"] =
+            Activity.Current?.TraceId.ToString() ?? ctx.HttpContext.TraceIdentifier;
+
+        var status = ctx.ProblemDetails.Status ?? ctx.HttpContext.Response.StatusCode;
+        if (status >= StatusCodes.Status500InternalServerError)
+        {
+            ctx.ProblemDetails.Title = "Internal Server Error";
+            var error = ctx.HttpContext.Features.Get<IExceptionHandlerFeature>()?.Error;
+
+            // Em Development, expõe o detalhe da exceção para depuração; em Production, genérico.
+            ctx.ProblemDetails.Detail = isDevelopment && error is not null
+                ? error.ToString()
+                : "Ocorreu um erro inesperado.";
+        }
+    };
+});
+
+// EF Core / PostgreSQL (Supabase). A connection string é SEGREDO: vem de user-secrets (dev) /
+// variável de ambiente (prod), nunca do appsettings.json versionado (Fase 7 / RF-06, runbook §2).
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection ausente. Configure via user-secrets em dev " +
+        "(dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"...\") " +
+        "ou variável de ambiente em produção. Ver RUNBOOK_PRODUCAO.md §2.");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
+
+// Health checks (Fase 7 / RF-04): liveness ('/health', sem tocar dependências) e readiness
+// ('/health/ready', tag "ready" — verifica o banco). Anônimos e fora do CORS restrito.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
+
+// Rate limiting (Fase 7 / RF-03): limite por IP aplicado SÓ ao POST /api/leads (único endpoint
+// anônimo de escrita). Excedido -> 429 ProblemDetails + Retry-After. Limite configurável.
+var leadsPerMinute = builder.Configuration.GetValue<int?>("RateLimit:LeadsPerMinute") ?? 5;
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("leads", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ClientIp(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = leadsPerMinute,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            }));
+
+    // 429 padronizado como ProblemDetails, consistente com o restante da API (RNF-08).
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/problem+json";
+
+        var retryAfterSeconds = 60;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+            context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc6585#section-4",
+            title = "Too Many Requests",
+            status = StatusCodes.Status429TooManyRequests,
+            detail = "Muitas solicitações. Tente novamente em instantes."
+        }, ct);
+    };
+});
+
+// Chave de partição do rate-limit por IP. Atrás de proxy/CDN, honra X-Forwarded-For
+// (requer ForwardedHeaders no ambiente — ver runbook); senão, cai no IP da conexão.
+static string ClientIp(HttpContext ctx)
+{
+    var forwarded = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(forwarded))
+        return forwarded.Split(',')[0].Trim();
+    return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
 
 // Distribuição de leads (round-robin por loja, §3.4 / RNF-06). Scoped: usa o AppDbContext.
 builder.Services.AddScoped<ILeadDistributionService, RoundRobinLeadDistributionService>();
@@ -96,19 +195,41 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new DisplayNameEnumConverterFactory());
 });
 
-// CORS — libera o frontend em dev. O app real roda em Vite (5173); 3000 incluído por segurança/SSR.
-const string DevCors = "RedlineDev";
+// CORS — origens por ambiente (Fase 7 / RNF-04). Em prod, restringir via Cors:AllowedOrigins
+// (sem localhost — runbook §4). Em dev, sem config, cai no Vite (5173) + 3000 (SSR).
+const string CorsPolicy = "Redline";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+if (allowedOrigins is null || allowedOrigins.Length == 0)
+{
+    allowedOrigins = isDevelopment
+        ? ["http://localhost:3000", "http://localhost:5173"]
+        : [];
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(DevCors, policy =>
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173")
+    options.AddPolicy(CorsPolicy, policy =>
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
 
 var app = builder.Build();
 
+// --- Bootstrap do banco (Fase 7 / RF-05) ---
+// MigrateAsync roda em QUALQUER ambiente (idempotente — RNF-03). O seed de dados de exemplo
+// só roda em Development; produção sobe com o schema aplicado e SEM dados semeados.
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 // --- Pipeline ---
+// Handler global: precisa ser o mais externo para capturar exceções de todo o pipeline (RF-01).
+app.UseExceptionHandler();
+app.UseStatusCodePages(); // 404/405 sem corpo também saem como ProblemDetails.
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -117,13 +238,32 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors(DevCors); // AllowAnyHeader já libera o header Authorization (RNF-05)
+
+// Logging estruturado por request (escopo com TraceId — RF-09), antes do roteamento de negócio.
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+app.UseCors(CorsPolicy); // AllowAnyHeader já libera o header Authorization (RNF-05)
+app.UseRateLimiter();
 
 // Ordem obrigatória: autenticação -> autorização (§5.4).
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/", () => "API da Redline está online e conectada!");
+
+// Health checks anônimos (RF-04). '/health' = liveness (nenhum check); '/health/ready' = readiness.
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => false, // liveness: só confirma que o processo responde
+    ResponseWriter = WriteHealthResponse
+}).AllowAnonymous();
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"), // readiness: verifica o banco
+    ResponseWriter = WriteHealthResponse
+}).AllowAnonymous();
+
 app.MapVehicleEndpoints();
 app.MapLeadEndpoints();
 app.MapMeEndpoints();
@@ -131,6 +271,14 @@ app.MapDashboardEndpoints();
 app.MapFavoriteEndpoints();
 
 app.Run();
+
+// Corpo mínimo dos health checks: { "status": "Healthy" | "Unhealthy" } (§4.1/§4.2). Sem detalhes internos.
+static Task WriteHealthResponse(HttpContext context, Microsoft.Extensions.Diagnostics.HealthChecks.HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    return context.Response.WriteAsync(
+        JsonSerializer.Serialize(new { status = report.Status.ToString() }));
+}
 
 
 // ---------------------------------------------------------------------------
@@ -141,9 +289,7 @@ static async Task SeedAsync(WebApplication app)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // RNF-07: evolução por Migrations (fim do EnsureCreated). Aplica a migration em dev.
-    await db.Database.MigrateAsync();
-
+    // As migrations já foram aplicadas no bootstrap (RF-05); aqui só semeamos dados de exemplo (dev).
     if (await db.Vehicles.AnyAsync()) return; // idempotente
 
     // Loja padrão (RF-01)

@@ -3,9 +3,11 @@ specs
 MASTER_PLAN.md
 
 # ---- Segredos / configuração local ----
-# appsettings.json contém a connection string do Supabase (senha do banco).
-RedlineApi/appsettings.json
+# Fase 7 (RF-06): appsettings.json foi higienizado — a connection string saiu para
+# user-secrets (dev) / variáveis de ambiente (prod), então volta a ser versionável.
+# Continuamos ignorando quaisquer overrides locais com segredo.
 **/appsettings.*.Local.json
+**/appsettings.Local.json
 *.env
 .env
 .env.local

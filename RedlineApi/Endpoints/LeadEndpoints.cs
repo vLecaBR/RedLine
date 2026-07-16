@@ -16,8 +16,9 @@ public static class LeadEndpoints
     {
         var group = app.MapGroup("/api").WithTags("Leads");
 
-        // Público (comprador anônimo — RF-05). Sem autenticação nesta fase.
-        group.MapPost("/leads", CreateLead);
+        // Público (comprador anônimo — RF-05). Sem autenticação, mas com rate-limit por IP
+        // (Fase 7 / RF-03): único endpoint anônimo de escrita -> anti-abuso -> 429 ao exceder.
+        group.MapPost("/leads", CreateLead).RequireRateLimiting("leads");
 
         // Protegidos (Fase 4 / RF-04): StoreStaff + escopo por StoreId do token.
         group.MapGet("/leads", GetLeads).RequireAuthorization("StoreStaff");
@@ -31,6 +32,7 @@ public static class LeadEndpoints
         CreateLeadRequest request,
         AppDbContext db,
         ILeadDistributionService distribution,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         // --- Validação de entrada -> 400 ProblemDetails (RNF-02) ---
@@ -85,6 +87,11 @@ public static class LeadEndpoints
 
         db.Leads.Add(lead);
         await db.SaveChangesAsync(ct);
+
+        // Auditoria mínima da escrita (RF-09): sem PII (não loga nome/mensagem do cliente).
+        loggerFactory.CreateLogger("Redline.Audit").LogInformation(
+            "Lead criado {LeadId} veículo {VehicleId} loja {StoreId} vendedor {SellerId}",
+            lead.Id, lead.VehicleId, lead.StoreId, lead.AssignedSellerId);
 
         var response = await ProjectByIdAsync(db, lead.Id, ct);
         return Results.Created($"/api/leads/{lead.Id}", response);
@@ -141,6 +148,7 @@ public static class LeadEndpoints
         ClaimsPrincipal principal,
         ICurrentUserService currentUser,
         AppDbContext db,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var storeId = await ResolveStoreIdAsync(principal, currentUser, ct);
@@ -168,9 +176,14 @@ public static class LeadEndpoints
                 return Problem(StatusCodes.Status400BadRequest, "Bad Request",
                     $"Transição de status inválida: '{Display(lead.Status)}' -> '{Display(target)}'.");
 
+            var previous = lead.Status;
             lead.Status = target;
             lead.UpdatedAt = DateTime.UtcNow; // RNF-08 (UTC)
             await db.SaveChangesAsync(ct);
+
+            loggerFactory.CreateLogger("Redline.Audit").LogInformation(
+                "Lead {LeadId} transição {From} -> {To} loja {StoreId}",
+                lead.Id, previous, target, storeId.Value);
         }
 
         var response = await ProjectByIdAsync(db, lead.Id, ct);

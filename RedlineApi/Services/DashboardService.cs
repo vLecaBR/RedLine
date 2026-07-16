@@ -32,44 +32,45 @@ public sealed class DashboardService(AppDbContext db) : IDashboardService
         var currentStart = now.AddDays(-30);
         var previousStart = now.AddDays(-60);
 
-        // --- 1) Leads Recebidos (contagem por janela) ---
-        var leadsCurrent = await db.Leads.AsNoTracking()
-            .Where(l => l.StoreId == storeId && l.CreatedAt >= currentStart && l.CreatedAt < now)
-            .CountAsync(ct);
+        // --- Leads: 4 métricas (recebidos atual/anterior + convertidos atual/anterior) em UMA ida ---
+        // Antes eram 4 CountAsync separados. Puxamos só {CreatedAt, Status} da janela de 60d (projeção
+        // enxuta, coberta pelo índice (StoreId, Status)) e derivamos os 4 números em memória — sem
+        // GroupBy traduzido (RNF-01) e com 1 round-trip no lugar de 4 (RNF-06).
+        var leadWindow = await db.Leads.AsNoTracking()
+            .Where(l => l.StoreId == storeId && l.CreatedAt >= previousStart && l.CreatedAt < now)
+            .Select(l => new { l.CreatedAt, l.Status })
+            .ToListAsync(ct);
 
-        var leadsPrevious = await db.Leads.AsNoTracking()
-            .Where(l => l.StoreId == storeId && l.CreatedAt >= previousStart && l.CreatedAt < currentStart)
-            .CountAsync(ct);
+        int leadsCurrent = 0, leadsPrevious = 0, convertedCurrent = 0, convertedPrevious = 0;
+        foreach (var l in leadWindow)
+        {
+            var isCurrent = l.CreatedAt >= currentStart; // janela [currentStart, now)
+            if (isCurrent) leadsCurrent++; else leadsPrevious++;
 
-        // --- 2) Anúncios Ativos (só IsActive — L24/Fase 5; delta = crescimento de criações ativas) ---
-        var vehiclesTotal = await db.Vehicles.AsNoTracking()
+            if (l.Status == LeadStatus.Convertido)
+            {
+                if (isCurrent) convertedCurrent++; else convertedPrevious++;
+            }
+        }
+
+        // --- Veículos: total ativo + criações por janela em UMA ida ---
+        // Puxamos só CreatedAt dos ativos da loja e derivamos total e as duas janelas em memória
+        // (2 round-trips a menos). Views continua um SUM agregado no banco (barato).
+        var activeCreatedAt = await db.Vehicles.AsNoTracking()
             .Where(v => v.StoreId == storeId && v.IsActive)
-            .CountAsync(ct);
+            .Select(v => v.CreatedAt)
+            .ToListAsync(ct);
 
-        var vehiclesCreatedCurrent = await db.Vehicles.AsNoTracking()
-            .Where(v => v.StoreId == storeId && v.IsActive && v.CreatedAt >= currentStart && v.CreatedAt < now)
-            .CountAsync(ct);
+        var vehiclesTotal = activeCreatedAt.Count;
+        var vehiclesCreatedCurrent = activeCreatedAt.Count(c => c >= currentStart && c < now);
+        var vehiclesCreatedPrevious = activeCreatedAt.Count(c => c >= previousStart && c < currentStart);
 
-        var vehiclesCreatedPrevious = await db.Vehicles.AsNoTracking()
-            .Where(v => v.StoreId == storeId && v.IsActive && v.CreatedAt >= previousStart && v.CreatedAt < currentStart)
-            .CountAsync(ct);
-
-        // --- 3) Visualizações (soma total; delta = 0.0 no MVP, sem histórico por período) ---
+        // --- Visualizações (soma total; delta = 0.0 no MVP, sem histórico por período) ---
         var viewsTotal = await db.Vehicles.AsNoTracking()
             .Where(v => v.StoreId == storeId)
             .SumAsync(v => (long)v.Views, ct);
 
-        // --- 4) Taxa de Conversão (convertidos / total de leads na janela) ---
-        var convertedCurrent = await db.Leads.AsNoTracking()
-            .Where(l => l.StoreId == storeId && l.Status == LeadStatus.Convertido
-                        && l.CreatedAt >= currentStart && l.CreatedAt < now)
-            .CountAsync(ct);
-
-        var convertedPrevious = await db.Leads.AsNoTracking()
-            .Where(l => l.StoreId == storeId && l.Status == LeadStatus.Convertido
-                        && l.CreatedAt >= previousStart && l.CreatedAt < currentStart)
-            .CountAsync(ct);
-
+        // --- Taxa de Conversão (convertidos / total de leads na janela) ---
         var convRateCurrent = leadsCurrent == 0 ? 0d : convertedCurrent * 100d / leadsCurrent;
         var convRatePrevious = leadsPrevious == 0 ? 0d : convertedPrevious * 100d / leadsPrevious;
 
