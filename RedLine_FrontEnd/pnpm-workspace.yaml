@@ -1,2 +1,12 @@
 packages:
   - '.'
+
+# pnpm v10+ deixou de ler o campo "pnpm" do package.json.
+# Estas configs vieram de lá (override do vite + builds nativos permitidos).
+
+overrides:
+  vite: 6.3.5
+
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild
